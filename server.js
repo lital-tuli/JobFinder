@@ -2,12 +2,12 @@
 import express from "express";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
-import connectDB from "./DB/connect.js";
 import corsMiddleware from "./middlewares/cors.js";
 import { loggerMiddleware } from "./logger/loggerService.js";
 import router from "./router/router.js";
 import { handleError } from "./utils/handleErrors.js";
 import seedData from "./utils/seedDB.js";
+import connectToDB from "./DB/dbService.js";
 
 // Load environment variables
 dotenv.config();
@@ -35,7 +35,7 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   try {
     // Connect to MongoDB
-    await connectDB();
+    await connectToDB();
     console.log("MongoDB connected successfully");
 
     // Seed initial data if needed
