@@ -1,4 +1,3 @@
-// server.js
 import express from "express";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
@@ -23,7 +22,7 @@ app.use(cookieParser());
 app.use(loggerMiddleware());
 
 // API routes
-app.use("/api/v1", router);
+app.use("/api", router);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

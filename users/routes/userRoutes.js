@@ -13,6 +13,19 @@ import { validateRegistration, validateLogin } from "../validation/userValidatio
 
 const router = express.Router();
 
+// First define specific routes
+router.get("/check-auth", auth, (req, res) => {
+  // Return the authenticated user info
+  return res.status(200).json({
+    isAuthenticated: true,
+    user: {
+      _id: req.user._id,
+      role: req.user.role,
+      isAdmin: req.user.isAdmin
+    }
+  });
+});
+
 // Register a new user
 router.post("/", async (req, res) => {
   try {
@@ -98,27 +111,27 @@ router.put("/:id", auth, async (req, res) => {
   });
   
   // Get saved jobs
-  router.get("/:id/saved-jobs", auth, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const requestingUserId = req.user._id;
-      
-      // Only allow users to access their own saved jobs
-      if (id !== requestingUserId && !req.user.isAdmin) {
-        return handleError(res, 403, "Not authorized to access these saved jobs");
-      }
-      
-      const savedJobs = await getSavedJobs(id);
-      if (savedJobs.error) {
-        return handleError(res, savedJobs.status || 404, savedJobs.message);
-      }
-      
-      return res.status(200).json(savedJobs);
-    } catch (error) {
-      return handleError(res, error.status || 500, error.message);
+router.get("/:id/saved-jobs", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const requestingUserId = req.user._id.toString(); // Convert ObjectId to string
+    
+    // Only allow users to access their own saved jobs
+    if (id !== requestingUserId && !req.user.isAdmin) {
+      return handleError(res, 403, "Not authorized to access these saved jobs");
     }
-  });
-  
+    
+    const savedJobs = await getSavedJobs(id);
+    if (savedJobs.error) {
+      return handleError(res, savedJobs.status || 404, savedJobs.message);
+    }
+    
+    return res.status(200).json(savedJobs);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
   // Get applied jobs
   router.get("/:id/applied-jobs", auth, async (req, res) => {
     try {

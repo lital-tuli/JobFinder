@@ -15,6 +15,7 @@ import validateRecruiter from "../../auth/recruiterAuth.js";
 import { handleError } from "../../utils/handleErrors.js";
 import validateJob from "../validation/jobValidationService.js";
 
+
 const router = express.Router();
 
 // Create a new job posting (recruiters only)

@@ -1,8 +1,7 @@
+import { generateAuthToken } from "../../auth/providers/JWT.js";
 import User from "../../DB/models/User.js";
-import { generateAuthToken } from "../../auth/providers/jwt.js";
 import { createError } from "../../utils/handleErrors.js";
 import { generatePassword, comparePasswords } from "../helpers/bcrypt.js";
-
 const registerUser = async (userData) => {
   try {
     // Check if user already exists

@@ -20,7 +20,7 @@ const seedData = async () => {
             last: "User"
           },
           email: "admin@jobfinder.com",
-          password: generatePassword("Admin123!"),
+          password: generatePassword("Admin123"),
           role: "recruiter",
           isAdmin: true,
           profession: "System Administrator",
@@ -33,7 +33,7 @@ const seedData = async () => {
             last: "Recruiter"
           },
           email: "recruiter@example.com",
-          password: generatePassword("Recruiter123!"),
+          password: generatePassword("Recruiter123"),
           role: "recruiter",
           profession: "HR Manager",
           bio: "Experienced HR manager looking for talented individuals"
@@ -45,7 +45,7 @@ const seedData = async () => {
             last: "JobSeeker"
           },
           email: "jobseeker@example.com",
-          password: generatePassword("Seeker123!"),
+          password: generatePassword("Seeker123"),
           role: "jobseeker",
           profession: "Software Developer",
           bio: "Experienced software developer looking for new opportunities"
