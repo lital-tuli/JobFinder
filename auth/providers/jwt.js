@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 
 dotenv.config();
-const SECRET_KEY = process.env.SECRET || "jobfinder_secret_key";
+const SECRET_KEY = process.env.SECRET || 'secret';
 
 const generateAuthToken = (user) => {
   const payload = {

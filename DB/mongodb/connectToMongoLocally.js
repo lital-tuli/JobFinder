@@ -1,12 +1,18 @@
-const mongoose = require("mongoose");
+// DB/mongodb/connectToMongoLocally.js
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const connectToLocalDb = async () => {
   try {
-    await mongoose.connect("mongodb://127.0.0.1:27017/JobFinder");
+    const uri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/JobFinder";
+    await mongoose.connect(uri);
     console.log("Connected to MongoDB locally");
   } catch (error) {
-    console.error("Could not connect to MongoDB", error);
+    console.error("Could not connect to MongoDB locally:", error);
+    throw error;
   }
 };
 
-module.exports = connectToLocalDb;
+export { connectToLocalDb };

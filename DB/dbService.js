@@ -1,17 +1,26 @@
+// DB/dbService.js
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import { connectToAtlasDb } from "./mongodb/connectToAtlas.js";
+import { connectToLocalDb } from "./mongodb/connectToMongoLocally.js";
+import config from "config";
 
+// Load environment variables
 dotenv.config();
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/JobFinder";
+// Get environment from config or environment variable
 const ENVIRONMENT = process.env.NODE_ENV || "development";
 
 const connectToDB = async () => {
   try {
-    await mongoose.connect(MONGODB_URI);
-    console.log(`Connected to MongoDB in ${ENVIRONMENT} environment`);
+    if (ENVIRONMENT === "production") {
+      await connectToAtlasDb();
+    } else {
+      await connectToLocalDb();
+    }
+    console.log(`MongoDB connected in ${ENVIRONMENT} mode`);
   } catch (error) {
-    console.error("Could not connect to MongoDB:", error.message);
+    console.error("Database connection error:", error.message);
     process.exit(1);
   }
 };
