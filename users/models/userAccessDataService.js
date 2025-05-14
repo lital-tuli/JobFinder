@@ -131,12 +131,17 @@ const getSavedJobs = async (userId) => {
 
 const getAppliedJobs = async (userId) => {
   try {
-    const user = await User.findById(userId).populate("appliedJobs");
+    const user = await User.findById(userId).populate({
+      path: 'appliedJobs',
+      model: 'Job'
+    });
+    
     if (!user) {
       const error = new Error("User not found");
       error.status = 404;
       throw error;
     }
+    
     return user.appliedJobs;
   } catch (error) {
     const status = error.status || 404;
