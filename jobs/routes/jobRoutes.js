@@ -61,7 +61,20 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Get a specific job by ID
+
+router.get("/my-listings", auth, validateRecruiter, async (req, res) => {
+  try {
+    const jobs = await getJobsByRecruiterId(req.user._id);
+    if (jobs.error) {
+      return handleError(res, jobs.status || 500, jobs.message);
+    }
+    
+    return res.status(200).json(jobs);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const job = await getJobById(req.params.id);
@@ -75,19 +88,6 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// Get jobs posted by the authenticated recruiter
-router.get("/my-listings", auth, validateRecruiter, async (req, res) => {
-  try {
-    const jobs = await getJobsByRecruiterId(req.user._id);
-    if (jobs.error) {
-      return handleError(res, jobs.status || 500, jobs.message);
-    }
-    
-    return res.status(200).json(jobs);
-  } catch (error) {
-    return handleError(res, error.status || 500, error.message);
-  }
-});
 
 // Update a job listing
 router.put("/:id", auth, async (req, res) => {
