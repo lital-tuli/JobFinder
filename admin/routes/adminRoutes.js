@@ -5,8 +5,13 @@ import {
   updateUserRole,
   deleteUser,
   getSystemStats,
-  toggleUserStatus
-} from "../models/adminAccessDataService.js";
+  toggleUserStatus,
+    updateJobForAdmin,
+    deleteJobForAdmin,
+    toggleJobStatus,
+    bulkDeleteJobs,
+    getJobStatistics
+  } from "../models/adminAccessDataService.js";
 import auth from "../../auth/authService.js";
 import { handleError } from "../../utils/handleErrors.js";
 
@@ -123,6 +128,131 @@ router.delete("/users/:id", auth, requireAdmin, async (req, res) => {
     }
     
     return res.status(200).json(result);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+// Get job statistics for admin dashboard
+router.get("/jobs/statistics", auth, requireAdmin, async (req, res) => {
+  try {
+    const stats = await getJobStatistics();
+    if (stats.error) {
+      return handleError(res, stats.status || 500, stats.message);
+    }
+    return res.status(200).json(stats);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Update job (admin only)
+router.put("/jobs/:id", auth, requireAdmin, async (req, res) => {
+  try {
+    const jobId = req.params.id;
+    const jobData = req.body;
+    
+    // Basic validation
+    if (!jobData.title || !jobData.company || !jobData.description) {
+      return handleError(res, 400, "Title, company, and description are required");
+    }
+    
+    const updatedJob = await updateJobForAdmin(jobId, jobData);
+    if (updatedJob.error) {
+      return handleError(res, updatedJob.status || 500, updatedJob.message);
+    }
+    
+    return res.status(200).json(updatedJob);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Toggle job status (active/inactive)
+router.put("/jobs/:id/status", auth, requireAdmin, async (req, res) => {
+  try {
+    const jobId = req.params.id;
+    
+    const result = await toggleJobStatus(jobId);
+    if (result.error) {
+      return handleError(res, result.status || 500, result.message);
+    }
+    
+    return res.status(200).json(result);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Delete job (admin only)
+router.delete("/jobs/:id", auth, requireAdmin, async (req, res) => {
+  try {
+    const jobId = req.params.id;
+    
+    const result = await deleteJobForAdmin(jobId);
+    if (result.error) {
+      return handleError(res, result.status || 500, result.message);
+    }
+    
+    return res.status(200).json(result);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Bulk delete jobs (admin only)
+router.delete("/jobs/bulk", auth, requireAdmin, async (req, res) => {
+  try {
+    const { jobIds } = req.body;
+    
+    if (!jobIds || !Array.isArray(jobIds) || jobIds.length === 0) {
+      return handleError(res, 400, "Job IDs array is required");
+    }
+    
+    const result = await bulkDeleteJobs(jobIds);
+    if (result.error) {
+      return handleError(res, result.status || 500, result.message);
+    }
+    
+    return res.status(200).json(result);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Get job applications for a specific job (admin only)
+router.get("/jobs/:id/applications", auth, requireAdmin, async (req, res) => {
+  try {
+    const jobId = req.params.id;
+    
+    const job = await Job.findById(jobId)
+      .populate({
+        path: 'applicants',
+        select: 'name email profession bio appliedJobs createdAt',
+        options: { sort: { createdAt: -1 } }
+      })
+      .populate('postedBy', 'name email');
+    
+    if (!job) {
+      return handleError(res, 404, "Job not found");
+    }
+    
+    // Get application dates (this would require implementing an applications tracking system)
+    const applicationsWithDates = job.applicants.map(applicant => ({
+      ...applicant.toObject(),
+      appliedAt: applicant.createdAt // Placeholder - would need proper application tracking
+    }));
+    
+    return res.status(200).json({
+      job: {
+        _id: job._id,
+        title: job.title,
+        company: job.company,
+        postedBy: job.postedBy,
+        createdAt: job.createdAt
+      },
+      applications: applicationsWithDates,
+      totalApplications: job.applicants.length
+    });
   } catch (error) {
     return handleError(res, error.status || 500, error.message);
   }

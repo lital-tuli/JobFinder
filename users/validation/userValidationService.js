@@ -8,13 +8,14 @@ const registerSchema = Joi.object({
   }).required(),
   email: Joi.string().email().required(),
   password: Joi.string()
-    .min(6)
-    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[A-Za-z\\d]{6,}$'))
+    .min(8)
+    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d{4,})(?=.*[!@%$#^&*\\-_*]).{8,}$'))
     .required()
     .messages({
-      'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+      'string.pattern.base': 'Password must contain at least 8 characters, one uppercase letter, one lowercase letter, at least 4 numbers, and one special character (!@%$#^&*-_*)',
+      'string.min': 'Password must be at least 8 characters long'
     }),
-  role: Joi.string().valid('jobseeker', 'recruiter', 'admin').default('jobseeker'), // Added admin
+  role: Joi.string().valid('jobseeker', 'recruiter', 'admin').default('jobseeker'),
   bio: Joi.string().allow(''),
   profession: Joi.string().allow(''),
 });
@@ -42,6 +43,25 @@ const updateRoleSchema = Joi.object({
   role: Joi.string().valid('jobseeker', 'recruiter', 'admin').required(),
 });
 
+// Schema for password change
+const changePasswordSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: Joi.string()
+    .min(8)
+    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d{4,})(?=.*[!@%$#^&*\\-_*]).{8,}$'))
+    .required()
+    .messages({
+      'string.pattern.base': 'New password must contain at least 8 characters, one uppercase letter, one lowercase letter, at least 4 numbers, and one special character (!@%$#^&*-_*)',
+      'string.min': 'New password must be at least 8 characters long'
+    }),
+  confirmPassword: Joi.string()
+    .valid(Joi.ref('newPassword'))
+    .required()
+    .messages({
+      'any.only': 'Passwords do not match'
+    })
+});
+
 const validateRegistration = (user) => {
   const { error } = registerSchema.validate(user);
   if (error) return error.details[0].message;
@@ -66,9 +86,16 @@ const validateRoleUpdate = (roleData) => {
   return "";
 };
 
+const validatePasswordChange = (passwordData) => {
+  const { error } = changePasswordSchema.validate(passwordData);
+  if (error) return error.details[0].message;
+  return "";
+};
+
 export { 
   validateRegistration, 
   validateLogin, 
   validateProfileUpdate, 
-  validateRoleUpdate 
+  validateRoleUpdate,
+  validatePasswordChange
 };

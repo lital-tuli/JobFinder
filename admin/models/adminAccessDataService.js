@@ -289,8 +289,175 @@ const cleanupOldApplications = async (daysOld = 180) => {
     return createError("Database", error);
   }
 };
+// Update job for admin
+const updateJobForAdmin = async (jobId, jobData) => {
+  try {
+    const job = await Job.findById(jobId);
+    if (!job) {
+      const error = new Error("Job not found");
+      error.status = 404;
+      throw error;
+    }
+    
+    const updatedJob = await Job.findByIdAndUpdate(
+      jobId, 
+      jobData, 
+      { new: true, runValidators: true }
+    ).populate("postedBy", "name.first name.last email");
+    
+    return updatedJob;
+  } catch (error) {
+    return createError("Database", error);
+  }
+};
+
+// Delete job for admin
+const deleteJobForAdmin = async (jobId) => {
+  try {
+    const job = await Job.findById(jobId);
+    if (!job) {
+      const error = new Error("Job not found");
+      error.status = 404;
+      throw error;
+    }
+    
+    // Remove job from users' saved jobs
+    await User.updateMany(
+      { savedJobs: jobId },
+      { $pull: { savedJobs: jobId } }
+    );
+    
+    // Remove job from users' applied jobs
+    await User.updateMany(
+      { appliedJobs: jobId },
+      { $pull: { appliedJobs: jobId } }
+    );
+    
+    await Job.findByIdAndDelete(jobId);
+    
+    return { message: "Job deleted successfully" };
+  } catch (error) {
+    return createError("Database", error);
+  }
+};
+
+// Toggle job status (active/inactive)
+const toggleJobStatus = async (jobId) => {
+  try {
+    const job = await Job.findById(jobId);
+    if (!job) {
+      const error = new Error("Job not found");
+      error.status = 404;
+      throw error;
+    }
+    
+    job.isActive = !job.isActive;
+    await job.save();
+    
+    return {
+      message: `Job ${job.isActive ? 'activated' : 'deactivated'} successfully`,
+      job: await Job.findById(jobId).populate("postedBy", "name.first name.last email")
+    };
+  } catch (error) {
+    return createError("Database", error);
+  }
+};
+
+// Bulk delete jobs
+const bulkDeleteJobs = async (jobIds) => {
+  try {
+    // Remove jobs from users' saved and applied jobs
+    await User.updateMany(
+      { $or: [{ savedJobs: { $in: jobIds } }, { appliedJobs: { $in: jobIds } }] },
+      { 
+        $pullAll: { 
+          savedJobs: jobIds,
+          appliedJobs: jobIds
+        }
+      }
+    );
+    
+    // Delete the jobs
+    const result = await Job.deleteMany({ _id: { $in: jobIds } });
+    
+    return {
+      message: `Successfully deleted ${result.deletedCount} jobs`,
+      deletedCount: result.deletedCount
+    };
+  } catch (error) {
+    return createError("Database", error);
+  }
+};
+
+// Get job statistics for admin
+const getJobStatistics = async () => {
+  try {
+    const [
+      totalJobs,
+      activeJobs,
+      inactiveJobs,
+      jobsByType,
+      jobsByLocation,
+      recentJobs,
+      topCompanies
+    ] = await Promise.all([
+      Job.countDocuments(),
+      Job.countDocuments({ isActive: true }),
+      Job.countDocuments({ isActive: false }),
+      Job.aggregate([
+        { $group: { _id: "$jobType", count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]),
+      Job.aggregate([
+        { $group: { _id: "$location", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ]),
+      Job.find()
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .populate("postedBy", "name.first name.last email"),
+      Job.aggregate([
+        { $group: { _id: "$company", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ])
+    ]);
+    
+    // Calculate total applications
+    const jobsWithApplicants = await Job.find({}, 'applicants');
+    const totalApplications = jobsWithApplicants.reduce(
+      (acc, job) => acc + (job.applicants ? job.applicants.length : 0), 
+      0
+    );
+    
+    return {
+      overview: {
+        totalJobs,
+        activeJobs,
+        inactiveJobs,
+        totalApplications
+      },
+      jobsByType: jobsByType.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      topLocations: jobsByLocation,
+      recentJobs,
+      topCompanies,
+      applicationRate: totalJobs > 0 ? (totalApplications / totalJobs).toFixed(2) : 0
+    };
+  } catch (error) {
+    return createError("Database", error);
+  }
+};
 
 export {
+  updateJobForAdmin,
+  deleteJobForAdmin,
+  toggleJobStatus,
+  bulkDeleteJobs,
+  getJobStatistics,
   getAllUsers,
   getAllJobsForAdmin,
   updateUserRole,
