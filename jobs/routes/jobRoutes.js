@@ -1,5 +1,5 @@
-// jobs/routes/jobRoutes.js
 import express from "express";
+import mongoose from "mongoose";
 import {
   createJob,
   getAllJobs,
@@ -15,8 +15,16 @@ import validateRecruiter from "../../auth/recruiterAuth.js";
 import { handleError } from "../../utils/handleErrors.js";
 import validateJob from "../validation/jobValidationService.js";
 
-
 const router = express.Router();
+
+// Middleware to validate ObjectId
+const validateObjectId = (req, res, next) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return handleError(res, 400, "Invalid job ID format");
+  }
+  next();
+};
 
 // Create a new job posting (recruiters only)
 router.post("/", auth, validateRecruiter, async (req, res) => {
@@ -61,7 +69,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-
+// Get jobs posted by the logged-in recruiter
 router.get("/my-listings", auth, validateRecruiter, async (req, res) => {
   try {
     const jobs = await getJobsByRecruiterId(req.user._id);
@@ -75,7 +83,8 @@ router.get("/my-listings", auth, validateRecruiter, async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+// Get a job by ID (with validation)
+router.get("/:id", validateObjectId, async (req, res) => {
   try {
     const job = await getJobById(req.params.id);
     if (job.error) {
@@ -88,9 +97,8 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-
-// Update a job listing
-router.put("/:id", auth, async (req, res) => {
+// Update a job listing (with validation)
+router.put("/:id", auth, validateObjectId, async (req, res) => {
   try {
     const validationError = validateJob(req.body);
     if (validationError) {
@@ -108,8 +116,8 @@ router.put("/:id", auth, async (req, res) => {
   }
 });
 
-// Apply for a job
-router.post("/:id/apply", auth, async (req, res) => {
+// Apply for a job (with validation)
+router.post("/:id/apply", auth, validateObjectId, async (req, res) => {
   try {
     // Only jobseekers can apply for jobs
     if (req.user.role !== "jobseeker") {
@@ -127,8 +135,8 @@ router.post("/:id/apply", auth, async (req, res) => {
   }
 });
 
-// Save a job for later
-router.post("/:id/save", auth, async (req, res) => {
+// Save a job for later (with validation)
+router.post("/:id/save", auth, validateObjectId, async (req, res) => {
   try {
     const result = await saveJob(req.params.id, req.user._id);
     if (result.error) {
@@ -141,8 +149,8 @@ router.post("/:id/save", auth, async (req, res) => {
   }
 });
 
-// Delete a job
-router.delete("/:id", auth, async (req, res) => {
+// Delete a job (with validation)
+router.delete("/:id", auth, validateObjectId, async (req, res) => {
   try {
     const result = await deleteJob(req.params.id, req.user._id);
     if (result.error) {
