@@ -60,6 +60,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
     resume: {
       type: String,
     },
@@ -76,6 +80,7 @@ const userSchema = new mongoose.Schema(
     },
   },
   { timestamps: true }
+  
 );
 
 const User = mongoose.model("User", userSchema);
