@@ -13,17 +13,23 @@ import { validateRegistration, validateLogin } from "../validation/userValidatio
 
 const router = express.Router();
 
-// First define specific routes
+// Check authentication status (this should be first, before the /:id route)
 router.get("/check-auth", auth, (req, res) => {
-  // Return the authenticated user info
-  return res.status(200).json({
-    isAuthenticated: true,
-    user: {
-      _id: req.user._id,
-      role: req.user.role,
-      isAdmin: req.user.isAdmin
-    }
-  });
+  try {
+    // Return the authenticated user info
+    return res.status(200).json({
+      isAuthenticated: true,
+      user: {
+        _id: req.user._id,
+        role: req.user.role,
+        isAdmin: req.user.isAdmin,
+        name: req.user.name,
+        email: req.user.email
+      }
+    });
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
 });
 
 // Register a new user
@@ -70,7 +76,7 @@ router.post("/login", async (req, res) => {
 router.get("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const requestingUserId = req.user._id;
+    const requestingUserId = req.user._id.toString(); // Convert to string for comparison
     
     // Only allow users to access their own profile or admin to access any profile
     if (id !== requestingUserId && !req.user.isAdmin) {
@@ -90,27 +96,27 @@ router.get("/:id", auth, async (req, res) => {
 
 // Update user
 router.put("/:id", auth, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const requestingUserId = req.user._id;
-      
-      // Only allow users to update their own profile or admin to update any profile
-      if (id !== requestingUserId && !req.user.isAdmin) {
-        return handleError(res, 403, "Not authorized to update this profile");
-      }
-      
-      const updatedUser = await updateUser(id, req.body);
-      if (updatedUser.error) {
-        return handleError(res, updatedUser.status || 500, updatedUser.message);
-      }
-      
-      return res.status(200).json(updatedUser);
-    } catch (error) {
-      return handleError(res, error.status || 500, error.message);
+  try {
+    const { id } = req.params;
+    const requestingUserId = req.user._id.toString(); // Convert to string for comparison
+    
+    // Only allow users to update their own profile or admin to update any profile
+    if (id !== requestingUserId && !req.user.isAdmin) {
+      return handleError(res, 403, "Not authorized to update this profile");
     }
-  });
-  
-  // Get saved jobs
+    
+    const updatedUser = await updateUser(id, req.body);
+    if (updatedUser.error) {
+      return handleError(res, updatedUser.status || 500, updatedUser.message);
+    }
+    
+    return res.status(200).json(updatedUser);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Get saved jobs
 router.get("/:id/saved-jobs", auth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -132,38 +138,26 @@ router.get("/:id/saved-jobs", auth, async (req, res) => {
   }
 });
 
-  // Get applied jobs
-  router.get("/:id/applied-jobs", auth, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const requestingUserId = req.user._id;
-      
-      // Only allow users to access their own applied jobs
-      if (id !== requestingUserId && !req.user.isAdmin) {
-        return handleError(res, 403, "Not authorized to access these applied jobs");
-      }
-      
-      const appliedJobs = await getAppliedJobs(id);
-      if (appliedJobs.error) {
-        return handleError(res, appliedJobs.status || 404, appliedJobs.message);
-      }
-      
-      return res.status(200).json(appliedJobs);
-    } catch (error) {
-      return handleError(res, error.status || 500, error.message);
+// Get applied jobs
+router.get("/:id/applied-jobs", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const requestingUserId = req.user._id.toString(); // Convert to string for comparison
+    
+    // Only allow users to access their own applied jobs
+    if (id !== requestingUserId && !req.user.isAdmin) {
+      return handleError(res, 403, "Not authorized to access these applied jobs");
     }
-  });
-  
-  // Check if user is authenticated (protected route)
-  router.get("/check-auth", auth, (req, res) => {
-    return res.status(200).json({
-      isAuthenticated: true,
-      user: {
-        _id: req.user._id,
-        role: req.user.role,
-        isAdmin: req.user.isAdmin
-      }
-    });
-  });
-  
-  export default router;
+    
+    const appliedJobs = await getAppliedJobs(id);
+    if (appliedJobs.error) {
+      return handleError(res, appliedJobs.status || 404, appliedJobs.message);
+    }
+    
+    return res.status(200).json(appliedJobs);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+export default router;

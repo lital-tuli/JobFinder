@@ -38,7 +38,6 @@ const userSchema = new mongoose.Schema(
       required: true,
       minLength: 6,
     },
-    
     appliedJobs: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -53,7 +52,7 @@ const userSchema = new mongoose.Schema(
     ],
     role: {
       type: String,
-      enum: ["jobseeker", "recruiter"],
+      enum: ["jobseeker", "recruiter", "admin"],  // Added admin role
       default: "jobseeker",
     },
     isAdmin: {
@@ -76,12 +75,26 @@ const userSchema = new mongoose.Schema(
     },
     profession: {
       type: String,
-      default: "Unemployed",
+      default: "Not specified",
     },
   },
   { timestamps: true }
-  
 );
+
+// Middleware to sync role and isAdmin
+userSchema.pre('save', function(next) {
+  if (this.role === 'admin') {
+    this.isAdmin = true;
+  } else if (this.isModified('role') && this.role !== 'admin') {
+    this.isAdmin = false;
+  }
+  next();
+});
+
+// Index for better performance
+userSchema.index({ email: 1 });
+userSchema.index({ role: 1 });
+userSchema.index({ isActive: 1 });
 
 const User = mongoose.model("User", userSchema);
 

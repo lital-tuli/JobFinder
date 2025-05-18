@@ -9,6 +9,8 @@ const generateAuthToken = (user) => {
     _id: user._id,
     role: user.role,
     isAdmin: user.isAdmin,
+    name: user.name,
+    email: user.email
   };
   return jwt.sign(payload, SECRET_KEY, { expiresIn: '24h' });
 };
@@ -18,6 +20,7 @@ const verifyToken = (tokenFromClient) => {
     const payload = jwt.verify(tokenFromClient, SECRET_KEY);
     return payload;
   } catch (error) {
+    console.error('Token verification error:', error);
     return null;
   }
 };

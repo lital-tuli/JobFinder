@@ -65,8 +65,13 @@ router.put("/users/:id/role", auth, requireAdmin, async (req, res) => {
     const { role } = req.body;
     const userId = req.params.id;
     
-    if (!role || !['jobseeker', 'recruiter'].includes(role)) {
-      return handleError(res, 400, "Invalid role. Must be 'jobseeker' or 'recruiter'");
+    // Prevent admin from changing their own role unless there are other admins
+    if (userId === req.user._id && role !== 'admin') {
+      return handleError(res, 400, "You cannot remove your own admin privileges");
+    }
+    
+    if (!role || !['jobseeker', 'recruiter', 'admin'].includes(role)) {
+      return handleError(res, 400, "Invalid role. Must be 'jobseeker', 'recruiter', or 'admin'");
     }
     
     const updatedUser = await updateUserRole(userId, role);
@@ -84,6 +89,12 @@ router.put("/users/:id/role", auth, requireAdmin, async (req, res) => {
 router.put("/users/:id/status", auth, requireAdmin, async (req, res) => {
   try {
     const userId = req.params.id;
+    
+    // Prevent admin from deactivating themselves
+    if (userId === req.user._id) {
+      return handleError(res, 400, "You cannot deactivate your own account");
+    }
+    
     const result = await toggleUserStatus(userId);
     
     if (result.error) {

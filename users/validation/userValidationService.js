@@ -14,7 +14,7 @@ const registerSchema = Joi.object({
     .messages({
       'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
     }),
-  role: Joi.string().valid('jobseeker', 'recruiter').default('jobseeker'),
+  role: Joi.string().valid('jobseeker', 'recruiter', 'admin').default('jobseeker'), // Added admin
   bio: Joi.string().allow(''),
   profession: Joi.string().allow(''),
 });
@@ -22,6 +22,24 @@ const registerSchema = Joi.object({
 const loginSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().required(),
+});
+
+// Schema for updating user profile
+const updateProfileSchema = Joi.object({
+  name: Joi.object({
+    first: Joi.string().min(2).max(256),
+    middle: Joi.string().min(0).max(256).allow(''),
+    last: Joi.string().min(2).max(256),
+  }),
+  email: Joi.string().email(),
+  bio: Joi.string().allow(''),
+  profession: Joi.string().allow(''),
+  // Don't allow role updates through regular profile update
+});
+
+// Schema for admin role updates
+const updateRoleSchema = Joi.object({
+  role: Joi.string().valid('jobseeker', 'recruiter', 'admin').required(),
 });
 
 const validateRegistration = (user) => {
@@ -36,4 +54,21 @@ const validateLogin = (credentials) => {
   return "";
 };
 
-export { validateRegistration, validateLogin };
+const validateProfileUpdate = (userData) => {
+  const { error } = updateProfileSchema.validate(userData);
+  if (error) return error.details[0].message;
+  return "";
+};
+
+const validateRoleUpdate = (roleData) => {
+  const { error } = updateRoleSchema.validate(roleData);
+  if (error) return error.details[0].message;
+  return "";
+};
+
+export { 
+  validateRegistration, 
+  validateLogin, 
+  validateProfileUpdate, 
+  validateRoleUpdate 
+};
