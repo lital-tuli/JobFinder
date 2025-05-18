@@ -11,37 +11,60 @@ const ENVIRONMENT = process.env.NODE_ENV || "development";
 
 const connectToDB = async () => {
   try {
-    // Use Atlas for production, local for development
-    if (ENVIRONMENT === "production" || process.env.ATLAS_CONNECTION_STRING) {
+    // Try Atlas first if connection string is provided
+    if (process.env.ATLAS_CONNECTION_STRING) {
+      console.log("🌐 Attempting Atlas connection...");
       await connectToAtlasDb();
     } else {
+      console.log("🏠 Using local MongoDB connection...");
       await connectToLocalDb();
     }
-    console.log(`MongoDB connected in ${ENVIRONMENT} mode`);
+    console.log(`✅ MongoDB connected successfully in ${ENVIRONMENT} mode`);
   } catch (error) {
-    console.error("Database connection error:", error.message);
-    process.exit(1);
+    console.error("❌ Primary database connection failed:", error.message);
+    
+    // If Atlas fails, try local as fallback
+    if (process.env.ATLAS_CONNECTION_STRING) {
+      console.log("🔄 Attempting fallback to local MongoDB...");
+      try {
+        await connectToLocalDb();
+        console.log("✅ Connected to local MongoDB as fallback");
+      } catch (localError) {
+        console.error("❌ Local MongoDB connection also failed:", localError.message);
+        console.error("💡 Please ensure either MongoDB Atlas is properly configured or MongoDB is running locally");
+        process.exit(1);
+      }
+    } else {
+      console.error("💡 No MongoDB connection available");
+      process.exit(1);
+    }
   }
 };
 
 // Handle connection events
 mongoose.connection.on('connected', () => {
-  console.log('Mongoose connected to MongoDB');
+  console.log('✅ Mongoose connected to MongoDB');
 });
 
 mongoose.connection.on('error', (err) => {
-  console.error('Mongoose connection error:', err);
+  console.error('❌ Mongoose connection error:', err.message);
 });
 
 mongoose.connection.on('disconnected', () => {
-  console.log('Mongoose disconnected');
+  console.log('🔌 Mongoose disconnected');
 });
 
-// Handle app termination
+// Handle app termination gracefully
 process.on('SIGINT', async () => {
-  await mongoose.connection.close();
-  console.log('MongoDB connection closed due to app termination');
-  process.exit(0);
+  console.log('\n🛑 Received SIGINT. Gracefully shutting down...');
+  try {
+    await mongoose.connection.close();
+    console.log('✅ MongoDB connection closed due to app termination');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error during shutdown:', error.message);
+    process.exit(1);
+  }
 });
 
 export default connectToDB;

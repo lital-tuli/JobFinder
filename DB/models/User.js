@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: true,
-      unique: true,
+      unique: true, // This creates an index automatically
       trim: true,
       lowercase: true,
       match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email address'],
@@ -52,7 +52,7 @@ const userSchema = new mongoose.Schema(
     ],
     role: {
       type: String,
-      enum: ["jobseeker", "recruiter", "admin"],  // Added admin role
+      enum: ["jobseeker", "recruiter", "admin"],
       default: "jobseeker",
     },
     isAdmin: {
@@ -91,8 +91,7 @@ userSchema.pre('save', function(next) {
   next();
 });
 
-// Index for better performance
-userSchema.index({ email: 1 });
+// Only add additional indexes (removed duplicate email index)
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 
