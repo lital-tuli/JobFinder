@@ -5,9 +5,9 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
+    "cleanup-logs": "node scripts/cleanup-console-logs.js",
     "dev": "nodemon server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -18,6 +18,8 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "express-async-handler": "^1.2.0",
+    "express-rate-limit": "^7.5.0",
+    "express-slow-down": "^2.1.0",
     "fs": "^0.0.1-security",
     "fs-extra": "^11.3.0",
     "joi": "^17.13.3",
