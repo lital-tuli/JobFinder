@@ -28,6 +28,7 @@ router.get("/check-auth", auth, (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Check auth error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
@@ -47,6 +48,7 @@ router.post("/", async (req, res) => {
     
     return res.status(201).json(result);
   } catch (error) {
+    console.error('Registration error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
@@ -68,6 +70,7 @@ router.post("/login", async (req, res) => {
     
     return res.status(200).json(result);
   } catch (error) {
+    console.error('Login error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
@@ -76,7 +79,7 @@ router.post("/login", async (req, res) => {
 router.get("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const requestingUserId = req.user._id.toString(); // Convert to string for comparison
+    const requestingUserId = req.user._id; // Now guaranteed to be string
     
     // Only allow users to access their own profile or admin to access any profile
     if (id !== requestingUserId && !req.user.isAdmin) {
@@ -90,6 +93,7 @@ router.get("/:id", auth, async (req, res) => {
     
     return res.status(200).json(user);
   } catch (error) {
+    console.error('Get user error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
@@ -98,7 +102,7 @@ router.get("/:id", auth, async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const requestingUserId = req.user._id.toString(); // Convert to string for comparison
+    const requestingUserId = req.user._id; // Now guaranteed to be string
     
     // Only allow users to update their own profile or admin to update any profile
     if (id !== requestingUserId && !req.user.isAdmin) {
@@ -112,6 +116,7 @@ router.put("/:id", auth, async (req, res) => {
     
     return res.status(200).json(updatedUser);
   } catch (error) {
+    console.error('Update user error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
@@ -120,7 +125,7 @@ router.put("/:id", auth, async (req, res) => {
 router.get("/:id/saved-jobs", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const requestingUserId = req.user._id.toString(); // Convert ObjectId to string
+    const requestingUserId = req.user._id; // Now guaranteed to be string
     
     // Only allow users to access their own saved jobs
     if (id !== requestingUserId && !req.user.isAdmin) {
@@ -134,6 +139,7 @@ router.get("/:id/saved-jobs", auth, async (req, res) => {
     
     return res.status(200).json(savedJobs);
   } catch (error) {
+    console.error('Get saved jobs error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
@@ -142,7 +148,7 @@ router.get("/:id/saved-jobs", auth, async (req, res) => {
 router.get("/:id/applied-jobs", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const requestingUserId = req.user._id.toString(); // Convert to string for comparison
+    const requestingUserId = req.user._id; // Now guaranteed to be string
     
     // Only allow users to access their own applied jobs
     if (id !== requestingUserId && !req.user.isAdmin) {
@@ -156,6 +162,7 @@ router.get("/:id/applied-jobs", auth, async (req, res) => {
     
     return res.status(200).json(appliedJobs);
   } catch (error) {
+    console.error('Get applied jobs error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });

@@ -18,9 +18,15 @@ const auth = (req, res, next) => {
       throw error;
     }
 
-    req.user = userInfo;
+    // Ensure _id is always a string for consistent comparison
+    req.user = {
+      ...userInfo,
+      _id: userInfo._id.toString()
+    };
+    
     return next();
   } catch (error) {
+    console.error('Authentication error:', error.message);
     return handleError(res, error.status || 401, error.message);
   }
 };
