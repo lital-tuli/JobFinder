@@ -94,8 +94,7 @@ router.get("/my-listings", auth, validateRecruiter, async (req, res) => {
   }
 });
 
-// IMPORTANT: Put specific routes BEFORE parameterized routes
-// Apply for a job (with validation) - MUST come before /:id route
+// Apply for a job - SPECIFIC ROUTE FIRST
 router.post("/:id/apply", auth, validateObjectId, async (req, res) => {
   try {
     // Only jobseekers can apply for jobs
@@ -114,7 +113,7 @@ router.post("/:id/apply", auth, validateObjectId, async (req, res) => {
   }
 });
 
-// Save a job for later (with validation) - MUST come before /:id route
+// Save a job for later - SPECIFIC ROUTE FIRST
 router.post("/:id/save", auth, validateObjectId, async (req, res) => {
   try {
     const result = await saveJob(req.params.id, req.user._id);
@@ -128,7 +127,7 @@ router.post("/:id/save", auth, validateObjectId, async (req, res) => {
   }
 });
 
-// Get a job by ID (with validation) - MUST come after specific routes
+// Get a job by ID - AFTER SPECIFIC ROUTES
 router.get("/:id", validateObjectId, async (req, res) => {
   try {
     const job = await getJobById(req.params.id);
@@ -142,7 +141,7 @@ router.get("/:id", validateObjectId, async (req, res) => {
   }
 });
 
-// Update a job listing (with validation)
+// Update a job listing
 router.put("/:id", auth, validateObjectId, async (req, res) => {
   try {
     const validationError = validateJob(req.body);
@@ -161,7 +160,7 @@ router.put("/:id", auth, validateObjectId, async (req, res) => {
   }
 });
 
-// Delete a job (with validation)
+// Delete a job
 router.delete("/:id", auth, validateObjectId, async (req, res) => {
   try {
     const result = await deleteJob(req.params.id, req.user._id);
