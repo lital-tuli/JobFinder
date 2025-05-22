@@ -57,6 +57,17 @@ router.get("/", async (req, res) => {
     const filters = {};
     if (req.query.jobType) filters.jobType = req.query.jobType;
     if (req.query.location) filters.location = { $regex: new RegExp(req.query.location, "i") };
+    if (req.query.company) filters.company = { $regex: new RegExp(req.query.company, "i") };
+    if (req.query.search) {
+      // Add search functionality across multiple fields
+      const searchRegex = new RegExp(req.query.search, "i");
+      filters.$or = [
+        { title: searchRegex },
+        { company: searchRegex },
+        { description: searchRegex },
+        { location: searchRegex }
+      ];
+    }
     
     const jobs = await getAllJobs(filters);
     if (jobs.error) {
@@ -83,7 +94,41 @@ router.get("/my-listings", auth, validateRecruiter, async (req, res) => {
   }
 });
 
-// Get a job by ID (with validation)
+// IMPORTANT: Put specific routes BEFORE parameterized routes
+// Apply for a job (with validation) - MUST come before /:id route
+router.post("/:id/apply", auth, validateObjectId, async (req, res) => {
+  try {
+    // Only jobseekers can apply for jobs
+    if (req.user.role !== "jobseeker") {
+      return handleError(res, 403, "Only jobseekers can apply for jobs");
+    }
+    
+    const job = await applyForJob(req.params.id, req.user._id);
+    if (job.error) {
+      return handleError(res, job.status || 500, job.message);
+    }
+    
+    return res.status(200).json(job);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Save a job for later (with validation) - MUST come before /:id route
+router.post("/:id/save", auth, validateObjectId, async (req, res) => {
+  try {
+    const result = await saveJob(req.params.id, req.user._id);
+    if (result.error) {
+      return handleError(res, result.status || 500, result.message);
+    }
+    
+    return res.status(200).json(result);
+  } catch (error) {
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Get a job by ID (with validation) - MUST come after specific routes
 router.get("/:id", validateObjectId, async (req, res) => {
   try {
     const job = await getJobById(req.params.id);
@@ -111,39 +156,6 @@ router.put("/:id", auth, validateObjectId, async (req, res) => {
     }
     
     return res.status(200).json(job);
-  } catch (error) {
-    return handleError(res, error.status || 500, error.message);
-  }
-});
-
-// Apply for a job (with validation)
-router.post("/:id/apply", auth, validateObjectId, async (req, res) => {
-  try {
-    // Only jobseekers can apply for jobs
-    if (req.user.role !== "jobseeker") {
-      return handleError(res, 403, "Only jobseekers can apply for jobs");
-    }
-    
-    const job = await applyForJob(req.params.id, req.user._id);
-    if (job.error) {
-      return handleError(res, job.status || 500, job.message);
-    }
-    
-    return res.status(200).json(job);
-  } catch (error) {
-    return handleError(res, error.status || 500, error.message);
-  }
-});
-
-// Save a job for later (with validation)
-router.post("/:id/save", auth, validateObjectId, async (req, res) => {
-  try {
-    const result = await saveJob(req.params.id, req.user._id);
-    if (result.error) {
-      return handleError(res, result.status || 500, result.message);
-    }
-    
-    return res.status(200).json(result);
   } catch (error) {
     return handleError(res, error.status || 500, error.message);
   }

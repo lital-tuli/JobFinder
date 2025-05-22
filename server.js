@@ -41,6 +41,15 @@ app.use(cookieParser());
 // Logging middleware
 app.use(loggerMiddleware());
 
+// Health check endpoint (not rate limited)
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // Apply API limiter to all API routes (100 requests per 15 minutes)
 app.use('/api', apiLimiter);
 
@@ -50,26 +59,23 @@ app.use('/api/users/register', authLimiter);
 
 // Apply job creation limiter to job posting (10 jobs per hour)
 app.use('/api/jobs', (req, res, next) => {
-  if (req.method === 'POST') {
+  if (req.method === 'POST' && !req.path.includes('/apply') && !req.path.includes('/save')) {
     return jobCreationLimiter(req, res, next);
   }
   next();
 });
 
 // Apply application limiter to job applications (20 applications per hour)
-app.use('/api/jobs/:id/apply', applicationLimiter);
+// Note: Using a more specific pattern to avoid the path-to-regexp issue
+app.use((req, res, next) => {
+  if (req.method === 'POST' && req.path.match(/^\/api\/jobs\/[^\/]+\/apply$/)) {
+    return applicationLimiter(req, res, next);
+  }
+  next();
+});
 
 // API routes (this should come after rate limiting)
 app.use("/api", router);
-
-// Health check endpoint (not rate limited)
-app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

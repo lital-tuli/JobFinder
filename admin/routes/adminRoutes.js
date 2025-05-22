@@ -1,4 +1,5 @@
 import express from "express";
+import Job from "../../DB/models/Job.js"; 
 import {
   getAllUsers,
   getAllJobsForAdmin,
@@ -6,12 +7,12 @@ import {
   deleteUser,
   getSystemStats,
   toggleUserStatus,
-    updateJobForAdmin,
-    deleteJobForAdmin,
-    toggleJobStatus,
-    bulkDeleteJobs,
-    getJobStatistics
-  } from "../models/adminAccessDataService.js";
+  updateJobForAdmin,
+  deleteJobForAdmin,
+  toggleJobStatus,
+  bulkDeleteJobs,
+  getJobStatistics
+} from "../models/adminAccessDataService.js";
 import auth from "../../auth/authService.js";
 import { handleError } from "../../utils/handleErrors.js";
 
@@ -132,6 +133,7 @@ router.delete("/users/:id", auth, requireAdmin, async (req, res) => {
     return handleError(res, error.status || 500, error.message);
   }
 });
+
 // Get job statistics for admin dashboard
 router.get("/jobs/statistics", auth, requireAdmin, async (req, res) => {
   try {
@@ -219,7 +221,7 @@ router.delete("/jobs/bulk", auth, requireAdmin, async (req, res) => {
   }
 });
 
-// Get job applications for a specific job (admin only)
+// FIXED: Get job applications for a specific job (admin only)
 router.get("/jobs/:id/applications", auth, requireAdmin, async (req, res) => {
   try {
     const jobId = req.params.id;
