@@ -1,5 +1,5 @@
 import { createError, handleError } from "../utils/handleErrors.js";
-import { verifyToken } from "./providers/JWT.js";
+import { verifyToken } from "./providers/jwt.js";
 
 const auth = (req, res, next) => {
   try {
