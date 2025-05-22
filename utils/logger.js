@@ -67,11 +67,6 @@ class Logger {
   auth(action, userId = null, details = null) {
     this.info(`AUTH ${action.toUpperCase()}`, { userId, ...details });
   }
-
-  // Rate limiting logging
-  rateLimit(message, data = null) {
-    this.warn(`RATE_LIMIT: ${message}`, data);
-  }
 }
 
 // Create singleton instance
