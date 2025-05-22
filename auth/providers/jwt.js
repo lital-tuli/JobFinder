@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import logger from "../../utils/logger.js";
 
 dotenv.config();
 const SECRET_KEY = process.env.SECRET || 'secret';
@@ -12,6 +13,8 @@ const generateAuthToken = (user) => {
     name: user.name,
     email: user.email
   };
+  
+  logger.auth('token generated', user._id, { role: user.role });
   return jwt.sign(payload, SECRET_KEY, { expiresIn: '24h' });
 };
 
@@ -20,7 +23,7 @@ const verifyToken = (tokenFromClient) => {
     const payload = jwt.verify(tokenFromClient, SECRET_KEY);
     return payload;
   } catch (error) {
-    console.error('Token verification error:', error);
+    logger.error('Token verification error:', error);
     return null;
   }
 };

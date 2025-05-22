@@ -23,22 +23,19 @@ class Logger {
     return formattedMessage;
   }
 
-  // Info level logging
+  // Info level logging (replaces most console.log)
   info(message, data = null) {
-    console.log(chalk.blue(this.formatMessage('INFO', message, data)));
-  }
+logger.info(chalk.blue(this.formatMessage('INFO', message, data)));  }
 
   // Success level logging
   success(message, data = null) {
-    console.log(chalk.green(this.formatMessage('SUCCESS', message, data)));
-  }
+logger.info(chalk.green(this.formatMessage('SUCCESS', message, data)));  }
 
   // Warning level logging
   warn(message, data = null) {
-    console.warn(chalk.yellow(this.formatMessage('WARN', message, data)));
-  }
+logger.warn(chalk.yellow(this.formatMessage('WARN', message, data)));  }
 
-  // Error level logging
+  // Error level logging (replaces console.error)
   error(message, error = null) {
     const errorData = error ? {
       name: error.name,
@@ -48,13 +45,13 @@ class Logger {
       status: error.status
     } : null;
 
-    console.error(chalk.red(this.formatMessage('ERROR', message, errorData)));
+    logger.error(chalk.red(this.formatMessage('ERROR', message, errorData)));
   }
 
   // Debug level logging (only in development)
   debug(message, data = null) {
     if (this.isDevelopment) {
-      console.log(chalk.gray(this.formatMessage('DEBUG', message, data)));
+      logger.info(chalk.gray(this.formatMessage('DEBUG', message, data)));
     }
   }
 
@@ -66,6 +63,16 @@ class Logger {
   // Authentication logging
   auth(action, userId = null, details = null) {
     this.info(`AUTH ${action.toUpperCase()}`, { userId, ...details });
+  }
+
+  // Server startup logging
+  server(message, data = null) {
+    this.success(`SERVER: ${message}`, data);
+  }
+
+  // Connection logging
+  connection(message, data = null) {
+    this.info(`CONNECTION: ${message}`, data);
   }
 }
 

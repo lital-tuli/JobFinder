@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import { connectToAtlasDb } from "./mongodb/connectToAtlas.js";
 import { connectToLocalDb } from "./mongodb/connectToMongoLocally.js";
+import logger from "../utils/logger.js";
 
 // Load environment variables
 dotenv.config();
@@ -13,29 +14,29 @@ const connectToDB = async () => {
   try {
     // Try Atlas first if connection string is provided
     if (process.env.ATLAS_CONNECTION_STRING) {
-      console.log("🌐 Attempting Atlas connection...");
+      logger.connection("Attempting Atlas connection...");
       await connectToAtlasDb();
     } else {
-      console.log("🏠 Using local MongoDB connection...");
+      logger.connection("Using local MongoDB connection...");
       await connectToLocalDb();
     }
-    console.log(`✅ MongoDB connected successfully in ${ENVIRONMENT} mode`);
+    logger.success(`MongoDB connected successfully in ${ENVIRONMENT} mode`);
   } catch (error) {
-    console.error("❌ Primary database connection failed:", error.message);
+    logger.error("Primary database connection failed:", error);
     
     // If Atlas fails, try local as fallback
     if (process.env.ATLAS_CONNECTION_STRING) {
-      console.log("🔄 Attempting fallback to local MongoDB...");
+      logger.warn("Attempting fallback to local MongoDB...");
       try {
         await connectToLocalDb();
-        console.log("✅ Connected to local MongoDB as fallback");
+        logger.success("Connected to local MongoDB as fallback");
       } catch (localError) {
-        console.error("❌ Local MongoDB connection also failed:", localError.message);
-        console.error("💡 Please ensure either MongoDB Atlas is properly configured or MongoDB is running locally");
+        logger.error("Local MongoDB connection also failed:", localError);
+        logger.error("Please ensure either MongoDB Atlas is properly configured or MongoDB is running locally");
         process.exit(1);
       }
     } else {
-      console.error("💡 No MongoDB connection available");
+      logger.error("No MongoDB connection available");
       process.exit(1);
     }
   }
@@ -43,26 +44,26 @@ const connectToDB = async () => {
 
 // Handle connection events
 mongoose.connection.on('connected', () => {
-  console.log('✅ Mongoose connected to MongoDB');
+  logger.success('Mongoose connected to MongoDB');
 });
 
 mongoose.connection.on('error', (err) => {
-  console.error('❌ Mongoose connection error:', err.message);
+  logger.error('Mongoose connection error:', err);
 });
 
 mongoose.connection.on('disconnected', () => {
-  console.log('🔌 Mongoose disconnected');
+  logger.warn('Mongoose disconnected');
 });
 
 // Handle app termination gracefully
 process.on('SIGINT', async () => {
-  console.log('\n🛑 Received SIGINT. Gracefully shutting down...');
+  logger.warn('Received SIGINT. Gracefully shutting down...');
   try {
     await mongoose.connection.close();
-    console.log('✅ MongoDB connection closed due to app termination');
+    logger.success('MongoDB connection closed due to app termination');
     process.exit(0);
   } catch (error) {
-    console.error('❌ Error during shutdown:', error.message);
+    logger.error('Error during shutdown:', error);
     process.exit(1);
   }
 });

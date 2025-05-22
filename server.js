@@ -7,6 +7,7 @@ import router from "./router/router.js";
 import { handleError } from "./utils/handleErrors.js";
 import seedData from "./utils/seedDB.js";
 import connectToDB from "./DB/dbService.js";
+import logger from "./utils/logger.js";
 
 // Load environment variables
 dotenv.config();
@@ -42,7 +43,7 @@ app.use("/api", router);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Server error:', err);
+  logger.error('Server error:', err);
   const message = err.message || "Internal Server Error";
   return handleError(res, err.status || 500, message);
 });
@@ -59,8 +60,8 @@ app.use('*', (req, res) => {
 // Start the server
 const startServer = async () => {
   try {
-    console.log('🚀 Starting JobFinder Server...');
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.server('Starting JobFinder Server...');
+    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     
     // Connect to MongoDB
     await connectToDB();
@@ -70,21 +71,20 @@ const startServer = async () => {
     
     // Start listening
     app.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
-      console.log(`🌐 API available at: http://localhost:${PORT}/api`);
-      console.log(`❤️  Health check: http://localhost:${PORT}/health`);
-      console.log('🎯 Server ready to accept connections!');
+      logger.server(`Server running on port ${PORT}`);
+      logger.info(`API available at: http://localhost:${PORT}/api`);
+      logger.info(`Health check: http://localhost:${PORT}/health`);
+      logger.server('Server ready to accept connections!');
     });
   } catch (error) {
-    console.error("❌ Server startup error:", error.message);
-    console.error(error.stack);
+    logger.error("Server startup error:", error);
     process.exit(1);
   }
 };
 
 // Graceful shutdown handling
 const gracefulShutdown = (signal) => {
-  console.log(`\n${signal} received, shutting down gracefully...`);
+  logger.warn(`${signal} received, shutting down gracefully...`);
   process.exit(0);
 };
 
@@ -93,13 +93,13 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled Rejection:', { reason, promise: promise.toString() });
   process.exit(1);
 });
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
+  logger.error('Uncaught Exception:', error);
   process.exit(1);
 });
 

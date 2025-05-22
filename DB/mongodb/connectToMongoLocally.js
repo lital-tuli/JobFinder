@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import logger from "../../utils/logger.js";
 
 dotenv.config();
 
@@ -13,14 +14,13 @@ const connectToLocalDb = async () => {
     };
     
     await mongoose.connect(uri, options);
-    console.log("✅ Connected to MongoDB locally at", uri);
+    logger.success(`Connected to MongoDB locally at ${uri}`);
   } catch (error) {
-    console.error("❌ Could not connect to MongoDB locally:");
-    console.error("Error:", error.message);
-    console.error("\n💡 Solutions:");
-    console.error("1. Make sure MongoDB is installed and running locally");
-    console.error("2. Run: mongod --dbpath /path/to/your/db");
-    console.error("3. Or install MongoDB Community Edition from https://www.mongodb.com/try/download/community");
+    logger.error("Could not connect to MongoDB locally:", error);
+    logger.info("Solutions:");
+    logger.info("1. Make sure MongoDB is installed and running locally");
+    logger.info("2. Run: mongod --dbpath /path/to/your/db");
+    logger.info("3. Or install MongoDB Community Edition from https://www.mongodb.com/try/download/community");
     throw error;
   }
 };

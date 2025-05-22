@@ -1,5 +1,6 @@
 import { createError, handleError } from "../utils/handleErrors.js";
 import { verifyToken } from "./providers/jwt.js";
+import logger from "../utils/logger.js";
 
 const auth = (req, res, next) => {
   try {
@@ -24,9 +25,10 @@ const auth = (req, res, next) => {
       _id: userInfo._id.toString()
     };
     
+    logger.auth('user authenticated', userInfo._id, { role: userInfo.role });
     return next();
   } catch (error) {
-    console.error('Authentication error:', error.message);
+    logger.error('Authentication error:', error);
     return handleError(res, error.status || 401, error.message);
   }
 };

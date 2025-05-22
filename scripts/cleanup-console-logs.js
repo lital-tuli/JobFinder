@@ -7,8 +7,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Files and directories to scan (relative to project root)
-const scanDirectories = ['./JobFinder/src', './jobs', './users', './auth', './utils', './logger', './admin', './middlewares', './DB'];
-const excludeDirectories = ['node_modules', '.git', 'dist', 'build'];
+const scanDirectories = ['./jobs', './users', './auth', './utils', './logger', './admin', './middlewares', './DB'];
+const excludeDirectories = ['node_modules', '.git', 'dist', 'build', 'JobFinder'];
 const fileExtensions = ['.js', '.jsx', '.ts', '.tsx'];
 
 // Console methods to look for
@@ -174,7 +174,7 @@ class ConsoleLogCleaner {
     console.log('🔍 Scanning for console.log statements...');
     
     scanDirectories.forEach(dir => {
-      const fullDir = path.resolve(__dirname, dir);
+      const fullDir = path.resolve(__dirname, '..', dir);
       if (fs.existsSync(fullDir)) {
         console.log(`Scanning: ${dir}`);
         this.scanDirectory(fullDir);

@@ -1,7 +1,7 @@
-// utils/seedDB.js
 import User from "../DB/models/User.js";
 import Job from "../DB/models/Job.js";
 import { generatePassword } from "../users/helpers/bcrypt.js";
+import logger from "./logger.js";
 
 const seedData = async () => {
   try {
@@ -9,7 +9,7 @@ const seedData = async () => {
     const userCount = await User.countDocuments();
     
     if (userCount === 0) {
-      console.log("No users found, seeding database with initial data...");
+      logger.info("No users found, seeding database with initial data...");
       
       // Create sample users
       const users = [
@@ -53,7 +53,7 @@ const seedData = async () => {
       ];
       
       const createdUsers = await User.insertMany(users);
-      console.log("Sample users created");
+      logger.success("Sample users created");
       
       // Create sample jobs
       const jobs = [
@@ -93,14 +93,14 @@ const seedData = async () => {
       ];
       
       await Job.insertMany(jobs);
-      console.log("Sample jobs created");
+      logger.success("Sample jobs created");
       
-      console.log("Database seeded successfully!");
+      logger.success("Database seeded successfully!");
     } else {
-      console.log("Database already contains users, skipping seed process");
+      logger.info("Database already contains users, skipping seed process");
     }
   } catch (error) {
-    console.error("Error seeding database:", error);
+    logger.error("Error seeding database:", error);
   }
 };
 

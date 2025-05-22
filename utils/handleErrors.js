@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import logger from "./logger.js";
 
 const createError = (validator, error) => {
   error.message = `${validator} Error: ${error.message}`;
@@ -7,7 +8,7 @@ const createError = (validator, error) => {
 };
 
 const handleError = (res, status, message = "") => {
-  console.log(chalk.bgYellowBright.red(message));
+  logger.error(`HTTP ${status}: ${message}`);
   return res.status(status).send(message);
 };
 
