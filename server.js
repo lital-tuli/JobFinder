@@ -15,15 +15,16 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// Trust proxy for better request handling behind reverse proxies
+// Memory optimization settings
 app.set('trust proxy', 1);
+app.set('x-powered-by', false); // Remove X-Powered-By header
 
 // CORS middleware (must come before other middleware)
 app.use(corsMiddleware);
 
-// Body parsing middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parsing middleware with limits to prevent memory issues
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 // Logging middleware
@@ -31,10 +32,16 @@ app.use(loggerMiddleware());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+  const memUsage = process.memoryUsage();
   res.status(200).json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    memory: {
+      rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+      heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+      heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`
+    }
   });
 });
 
@@ -57,6 +64,20 @@ app.use('*', (req, res) => {
   });
 });
 
+// Memory monitoring (development only)
+if (process.env.NODE_ENV !== 'production') {
+  setInterval(() => {
+    const memUsage = process.memoryUsage();
+    if (memUsage.heapUsed > 500 * 1024 * 1024) { // 500MB
+      logger.warn('High memory usage detected:', {
+        heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+        heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+        rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`
+      });
+    }
+  }, 30000); // Check every 30 seconds
+}
+
 // Start the server
 const startServer = async () => {
   try {
@@ -70,12 +91,16 @@ const startServer = async () => {
     await seedData();
     
     // Start listening
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       logger.server(`Server running on port ${PORT}`);
       logger.info(`API available at: http://localhost:${PORT}/api`);
       logger.info(`Health check: http://localhost:${PORT}/health`);
       logger.server('Server ready to accept connections!');
     });
+
+    // Set server timeout to prevent hanging connections
+    server.timeout = 30000; // 30 seconds
+    
   } catch (error) {
     logger.error("Server startup error:", error);
     process.exit(1);
@@ -85,6 +110,13 @@ const startServer = async () => {
 // Graceful shutdown handling
 const gracefulShutdown = (signal) => {
   logger.warn(`${signal} received, shutting down gracefully...`);
+  
+  // Force exit after 10 seconds if graceful shutdown takes too long
+  setTimeout(() => {
+    logger.error('Forcing server shutdown...');
+    process.exit(1);
+  }, 10000);
+  
   process.exit(0);
 };
 
@@ -102,5 +134,15 @@ process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', error);
   process.exit(1);
 });
+
+// Periodic garbage collection in development
+if (process.env.NODE_ENV !== 'production') {
+  setInterval(() => {
+    if (global.gc) {
+      global.gc();
+      logger.debug('Garbage collection triggered');
+    }
+  }, 60000); // Every minute
+}
 
 startServer();

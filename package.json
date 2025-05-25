@@ -6,9 +6,9 @@
   "type": "module",
   "scripts": {
     "cleanup-logs": "node scripts/cleanup-console-logs.js",
-    "dev": "node --max-old-space-size=4096 --inspect=0.0.0.0:9229 ./node_modules/.bin/nodemon server.js",
-    "start": "node --max-old-space-size=4096 server.js",
-    "prod": "NODE_ENV=production node --max-old-space-size=8192 server.js"
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "prod": "NODE_ENV=production node server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

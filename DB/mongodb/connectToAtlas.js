@@ -11,10 +11,15 @@ const connectToAtlasDb = async () => {
       throw new Error("ATLAS_CONNECTION_STRING environment variable is not defined");
     }
 
-    // Updated connection options (removed deprecated ones)
+    // Optimized connection options to prevent memory leaks
     const options = {
-      serverSelectionTimeoutMS: 10000, // Keep trying to send operations for 10 seconds
-      socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10, // Limit connection pool size
+      minPoolSize: 5,
+      maxIdleTimeMS: 30000,
+      bufferMaxEntries: 0, // Disable mongoose buffering
+      bufferCommands: false, // Disable mongoose buffering
     };
 
     logger.connection("Attempting to connect to MongoDB Atlas...");
