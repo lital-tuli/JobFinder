@@ -10,6 +10,8 @@ import {
 import auth from "../../auth/authService.js";
 import { handleError } from "../../utils/handleErrors.js";
 import { validateRegistration, validateLogin } from "../validation/userValidationService.js";
+import multer from 'multer';
+
 
 const router = express.Router();
 
