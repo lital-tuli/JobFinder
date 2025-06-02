@@ -8,9 +8,14 @@ import { handleError } from "./utils/handleErrors.js";
 import seedData from "./utils/seedDB.js";
 import connectToDB from "./DB/dbService.js";
 import logger from "./utils/logger.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
 // Load environment variables
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -29,6 +34,9 @@ app.use(cookieParser());
 
 // Logging middleware
 app.use(loggerMiddleware());
+
+// Serve uploaded files statically (images, profile pictures etc)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
