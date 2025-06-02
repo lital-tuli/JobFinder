@@ -4,7 +4,6 @@ import cookieParser from "cookie-parser";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import compression from "compression";
 
@@ -43,26 +42,6 @@ app.use(helmet({
     },
   },
 }));
-
-// Rate limiting
-const createRateLimit = (windowMs, max, message) => {
-  return rateLimit({
-    windowMs,
-    max,
-    message: { error: message },
-    standardHeaders: true,
-    legacyHeaders: false,
-    skip: (req) => {
-      // Skip rate limiting for health checks in development
-      return NODE_ENV === 'development' && req.path === '/health';
-    },
-  });
-};
-
-// Apply different rate limits for different routes
-app.use('/api/users/login', createRateLimit(15 * 60 * 1000, 5, 'Too many login attempts, please try again later'));
-app.use('/api/users', createRateLimit(15 * 60 * 1000, 50, 'Too many requests to user endpoints'));
-app.use('/api', createRateLimit(15 * 60 * 1000, 100, 'Too many API requests, please try again later'));
 
 // Memory optimization settings
 app.set('trust proxy', 1);
@@ -384,12 +363,12 @@ const gracefulShutdown = (signal) => {
   closeServer();
 };
 
-// Handle shutdown signals
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+// Handle shutdown signals - use once to prevent multiple listeners
+process.once('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.once('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
+// Handle unhandled promise rejections - use once to prevent multiple listeners
+process.once('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection at:', {
     promise: promise.toString(),
     reason: reason
@@ -401,8 +380,8 @@ process.on('unhandledRejection', (reason, promise) => {
   }
 });
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
+// Handle uncaught exceptions - use once to prevent multiple listeners
+process.once('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', {
     error: error.message,
     stack: error.stack
@@ -412,14 +391,17 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-// Handle warning events
-process.on('warning', (warning) => {
+// Handle warning events - use once to prevent multiple listeners
+process.once('warning', (warning) => {
   logger.warn('Node.js warning:', {
     name: warning.name,
     message: warning.message,
     stack: warning.stack
   });
 });
+
+// Increase max listeners to prevent warnings
+process.setMaxListeners(15);
 
 // Start the server
 let server;

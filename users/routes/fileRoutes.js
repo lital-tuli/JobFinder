@@ -1,126 +1,353 @@
-// users/routes/userRoutes.js - Main user routes router (2-file split)
 import express from "express";
-import authRoutes from "./authRoutes.js";
-import fileRoutes from "./fileRoutes.js";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from 'url';
+import { uploadProfilePicture, uploadResume, handleUploadError } from "../../middlewares/uploadMiddleware.js";
+import { updateUser, getUserById } from "../models/userAccessDataService.js";
+import { validateFile } from "../../services/fileValidationService.js";
+import auth from "../../auth/authService.js";
+import { handleError } from "../../utils/handleErrors.js";
 import logger from "../../utils/logger.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
 // =============================================================================
-// ROUTE ORGANIZATION
+// PROFILE PICTURE ROUTES
 // =============================================================================
 
-// Mount the two main route modules
-router.use("/", authRoutes);    // Authentication & Profile Management
-router.use("/", fileRoutes);    // File Upload & Management
+// Upload profile picture
+router.post("/profile/picture", auth, (req, res) => {
+  uploadProfilePicture(req, res, async (err) => {
+    if (err) {
+      return handleUploadError(err, req, res, () => {});
+    }
 
-// =============================================================================
-// API DOCUMENTATION
-// =============================================================================
-
-// Get API documentation for user routes
-router.get("/docs", (req, res) => {
-  const documentation = {
-    message: "JobFinder User API Documentation",
-    version: "2.0.0",
-    organization: "Split into 2 main modules",
-    modules: {
-      authRoutes: {
-        description: "Authentication and Profile Management",
-        endpoints: [
-          "GET /check-auth - Check authentication status",
-          "POST / - Register new user", 
-          "POST /login - User login",
-          "POST /logout - User logout",
-          "GET /:id - Get user profile",
-          "PUT /:id - Update user profile",
-          "GET /profile/me - Get current user profile",
-          "PUT /profile/me - Update current user profile",
-          "GET /:id/saved-jobs - Get saved jobs",
-          "GET /:id/applied-jobs - Get applied jobs",
-          "GET /jobs/saved - Get current user's saved jobs",
-          "GET /jobs/applied - Get current user's applied jobs",
-          "GET /jobs/activity - Get job activity summary"
-        ]
-      },
-      fileRoutes: {
-        description: "File Upload and Management",
-        endpoints: [
-          "POST /profile/picture - Upload profile picture",
-          "POST /profile/resume - Upload resume",
-          "DELETE /profile/picture - Delete profile picture",
-          "DELETE /profile/resume - Delete resume",
-          "GET /profile/files - Get files information",
-          "GET /profile/resume/download - Download resume",
-          "POST /profile - Legacy profile picture upload"
-        ]
+    try {
+      if (!req.file) {
+        return handleError(res, 400, "No profile picture uploaded");
       }
-    },
-    fileUpload: {
+
+      // Validate file
+      const validationErrors = validateFile(req.file, 'profilePicture');
+      if (validationErrors.length > 0) {
+        // Delete uploaded file if validation fails
+        fs.unlinkSync(req.file.path);
+        return handleError(res, 400, validationErrors.join(', '));
+      }
+
+      // Delete old profile picture if exists
+      const user = await getUserById(req.user._id);
+      if (user.profilePicture) {
+        const oldPicturePath = path.join(__dirname, '..', '..', user.profilePicture);
+        if (fs.existsSync(oldPicturePath)) {
+          fs.unlinkSync(oldPicturePath);
+          logger.info(`Deleted old profile picture: ${user.profilePicture}`);
+        }
+      }
+
+      // Update user with new profile picture path
+      const relativePath = path.relative(path.join(__dirname, '..', '..'), req.file.path);
+      const updatedUser = await updateUser(req.user._id, {
+        profilePicture: relativePath.replace(/\\/g, '/')
+      });
+
+      if (updatedUser.error) {
+        // Delete uploaded file if database update fails
+        fs.unlinkSync(req.file.path);
+        return handleError(res, updatedUser.status || 500, updatedUser.message);
+      }
+
+      logger.info('Profile picture uploaded successfully', {
+        userId: req.user._id,
+        filename: req.file.filename
+      });
+
+      return res.status(200).json({
+        message: "Profile picture uploaded successfully",
+        profilePicture: relativePath.replace(/\\/g, '/'),
+        user: updatedUser
+      });
+    } catch (error) {
+      // Delete uploaded file if there's an error
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      logger.error('Profile picture upload error:', error);
+      return handleError(res, error.status || 500, error.message);
+    }
+  });
+});
+
+// Delete profile picture
+router.delete("/profile/picture", auth, async (req, res) => {
+  try {
+    const user = await getUserById(req.user._id);
+    if (user.error) {
+      return handleError(res, user.status || 404, user.message);
+    }
+
+    if (!user.profilePicture) {
+      return handleError(res, 404, "No profile picture to delete");
+    }
+
+    // Delete file from filesystem
+    const picturePath = path.join(__dirname, '..', '..', user.profilePicture);
+    if (fs.existsSync(picturePath)) {
+      fs.unlinkSync(picturePath);
+      logger.info(`Deleted profile picture: ${user.profilePicture}`);
+    }
+
+    // Update user record
+    const updatedUser = await updateUser(req.user._id, {
+      profilePicture: null
+    });
+
+    if (updatedUser.error) {
+      return handleError(res, updatedUser.status || 500, updatedUser.message);
+    }
+
+    return res.status(200).json({
+      message: "Profile picture deleted successfully",
+      user: updatedUser
+    });
+  } catch (error) {
+    logger.error('Profile picture deletion error:', error);
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// =============================================================================
+// RESUME ROUTES
+// =============================================================================
+
+// Upload resume
+router.post("/profile/resume", auth, (req, res) => {
+  uploadResume(req, res, async (err) => {
+    if (err) {
+      return handleUploadError(err, req, res, () => {});
+    }
+
+    try {
+      if (!req.file) {
+        return handleError(res, 400, "No resume uploaded");
+      }
+
+      // Validate file
+      const validationErrors = validateFile(req.file, 'resume');
+      if (validationErrors.length > 0) {
+        // Delete uploaded file if validation fails
+        fs.unlinkSync(req.file.path);
+        return handleError(res, 400, validationErrors.join(', '));
+      }
+
+      // Delete old resume if exists
+      const user = await getUserById(req.user._id);
+      if (user.resume) {
+        const oldResumePath = path.join(__dirname, '..', '..', user.resume);
+        if (fs.existsSync(oldResumePath)) {
+          fs.unlinkSync(oldResumePath);
+          logger.info(`Deleted old resume: ${user.resume}`);
+        }
+      }
+
+      // Update user with new resume path
+      const relativePath = path.relative(path.join(__dirname, '..', '..'), req.file.path);
+      const updatedUser = await updateUser(req.user._id, {
+        resume: relativePath.replace(/\\/g, '/')
+      });
+
+      if (updatedUser.error) {
+        // Delete uploaded file if database update fails
+        fs.unlinkSync(req.file.path);
+        return handleError(res, updatedUser.status || 500, updatedUser.message);
+      }
+
+      logger.info('Resume uploaded successfully', {
+        userId: req.user._id,
+        filename: req.file.filename
+      });
+
+      return res.status(200).json({
+        message: "Resume uploaded successfully",
+        resume: relativePath.replace(/\\/g, '/'),
+        user: updatedUser
+      });
+    } catch (error) {
+      // Delete uploaded file if there's an error
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      logger.error('Resume upload error:', error);
+      return handleError(res, error.status || 500, error.message);
+    }
+  });
+});
+
+// Delete resume
+router.delete("/profile/resume", auth, async (req, res) => {
+  try {
+    const user = await getUserById(req.user._id);
+    if (user.error) {
+      return handleError(res, user.status || 404, user.message);
+    }
+
+    if (!user.resume) {
+      return handleError(res, 404, "No resume to delete");
+    }
+
+    // Delete file from filesystem
+    const resumePath = path.join(__dirname, '..', '..', user.resume);
+    if (fs.existsSync(resumePath)) {
+      fs.unlinkSync(resumePath);
+      logger.info(`Deleted resume: ${user.resume}`);
+    }
+
+    // Update user record
+    const updatedUser = await updateUser(req.user._id, {
+      resume: null
+    });
+
+    if (updatedUser.error) {
+      return handleError(res, updatedUser.status || 500, updatedUser.message);
+    }
+
+    return res.status(200).json({
+      message: "Resume deleted successfully",
+      user: updatedUser
+    });
+  } catch (error) {
+    logger.error('Resume deletion error:', error);
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Download resume
+router.get("/profile/resume/download", auth, async (req, res) => {
+  try {
+    const user = await getUserById(req.user._id);
+    if (user.error) {
+      return handleError(res, user.status || 404, user.message);
+    }
+
+    if (!user.resume) {
+      return handleError(res, 404, "No resume found");
+    }
+
+    const resumePath = path.join(__dirname, '..', '..', user.resume);
+    if (!fs.existsSync(resumePath)) {
+      return handleError(res, 404, "Resume file not found");
+    }
+
+    // Set appropriate headers for download
+    const filename = path.basename(resumePath);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+
+    // Stream the file
+    const fileStream = fs.createReadStream(resumePath);
+    fileStream.pipe(res);
+
+    logger.info('Resume downloaded', {
+      userId: req.user._id,
+      filename: filename
+    });
+  } catch (error) {
+    logger.error('Resume download error:', error);
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// =============================================================================
+// FILE INFORMATION ROUTES
+// =============================================================================
+
+// Get user's file information
+router.get("/profile/files", auth, async (req, res) => {
+  try {
+    const user = await getUserById(req.user._id);
+    if (user.error) {
+      return handleError(res, user.status || 404, user.message);
+    }
+
+    const fileInfo = {
       profilePicture: {
-        maxSize: "5MB",
-        allowedTypes: ["JPG", "JPEG", "PNG", "GIF", "WebP"],
-        fieldName: "profilePicture"
+        exists: !!user.profilePicture,
+        path: user.profilePicture || null,
+        url: user.profilePicture ? `/uploads/${user.profilePicture}` : null
       },
       resume: {
-        maxSize: "10MB", 
-        allowedTypes: ["PDF", "DOC", "DOCX"],
-        fieldName: "resume"
+        exists: !!user.resume,
+        path: user.resume || null,
+        downloadUrl: user.resume ? `/api/users/profile/resume/download` : null
       }
-    },
-    authentication: {
-      required: "Most endpoints require x-auth-token header",
-      exceptions: ["POST /", "POST /login", "GET /docs", "GET /health"]
-    },
-    notes: [
-      "All legacy routes are maintained for backward compatibility",
-      "File uploads use multipart/form-data",
-      "Profile pictures are automatically optimized",
-      "Resumes can be downloaded with authentication"
-    ]
-  };
+    };
 
-  res.status(200).json(documentation);
+    return res.status(200).json({
+      message: "File information retrieved successfully",
+      files: fileInfo
+    });
+  } catch (error) {
+    logger.error('Get file info error:', error);
+    return handleError(res, error.status || 500, error.message);
+  }
 });
 
 // =============================================================================
-// HEALTH CHECK
+// LEGACY ROUTES (for backward compatibility)
 // =============================================================================
 
-// Health check for user routes
-router.get("/health", (req, res) => {
-  const health = {
-    status: "OK",
-    service: "User Routes",
-    timestamp: new Date().toISOString(),
-    modules: {
-      authRoutes: "active",
-      fileRoutes: "active"
-    },
-    uptime: process.uptime(),
-    memory: {
-      used: `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`,
-      total: `${Math.round(process.memoryUsage().heapTotal / 1024 / 1024)}MB`
+// Legacy profile picture upload route
+router.post("/profile", auth, (req, res) => {
+  uploadProfilePicture(req, res, async (err) => {
+    if (err) {
+      return handleUploadError(err, req, res, () => {});
     }
-  };
 
-  logger.debug('User routes health check requested');
-  res.status(200).json(health);
-});
+    try {
+      if (!req.file) {
+        return handleError(res, 400, "No file uploaded");
+      }
 
-// =============================================================================
-// CATCH-ALL ERROR HANDLER
-// =============================================================================
+      // Delete old profile picture if exists
+      const user = await getUserById(req.user._id);
+      if (user.profilePicture) {
+        const oldPicturePath = path.join(__dirname, '..', '..', user.profilePicture);
+        if (fs.existsSync(oldPicturePath)) {
+          fs.unlinkSync(oldPicturePath);
+        }
+      }
 
-// Handle 404 for unknown user routes
-router.use("*", (req, res) => {
-  logger.warn(`404 - User route not found: ${req.method} ${req.originalUrl}`);
-  res.status(404).json({
-    error: "User route not found",
-    path: req.originalUrl,
-    method: req.method,
-    message: "Check /api/users/docs for available endpoints",
-    suggestion: "Verify the endpoint URL and HTTP method"
+      // Update user with new profile picture path
+      const relativePath = path.relative(path.join(__dirname, '..', '..'), req.file.path);
+      const updatedUser = await updateUser(req.user._id, {
+        profilePicture: relativePath.replace(/\\/g, '/')
+      });
+
+      if (updatedUser.error) {
+        fs.unlinkSync(req.file.path);
+        return handleError(res, updatedUser.status || 500, updatedUser.message);
+      }
+
+      logger.info('Profile picture uploaded via legacy route', {
+        userId: req.user._id,
+        filename: req.file.filename
+      });
+
+      return res.status(200).json({
+        message: "Profile picture uploaded successfully",
+        profilePicture: relativePath.replace(/\\/g, '/'),
+        user: updatedUser
+      });
+    } catch (error) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      logger.error('Legacy profile upload error:', error);
+      return handleError(res, error.status || 500, error.message);
+    }
   });
 });
 
