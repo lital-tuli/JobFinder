@@ -12,9 +12,9 @@ const ENVIRONMENT = process.env.NODE_ENV || "development";
 
 const connectToDB = async () => {
   try {
-    // Set mongoose options to prevent memory leaks
+    // Set mongoose options to prevent memory leaks - removed deprecated options
     mongoose.set('strictQuery', false);
-    mongoose.set('bufferCommands', false);
+   
     
     // Try Atlas first if connection string is provided
     if (process.env.ATLAS_CONNECTION_STRING) {

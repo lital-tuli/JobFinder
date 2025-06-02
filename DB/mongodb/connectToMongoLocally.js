@@ -8,7 +8,6 @@ const connectToLocalDb = async () => {
   try {
     const uri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/JobFinder";
     
-    // Simple options for local connection
     const options = {
       serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
     };
