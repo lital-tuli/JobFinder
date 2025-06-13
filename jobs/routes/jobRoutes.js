@@ -11,9 +11,18 @@ import {
   deleteJob
 } from "../models/jobAccessDataService.js";
 import auth from "../../auth/authService.js";
-import validateRecruiter from "../../auth/recruiterAuth.js";
+import validateRecruiter, { requireRecruiter } from "../../auth/recruiterAuth.js"; // UPDATED IMPORT
 import { handleError } from "../../utils/handleErrors.js";
 import validateJob from "../validation/jobValidationService.js";
+import Job from "../models/Job.js";
+import User from "../../users/models/User.js";
+import logger from "../../utils/logger.js";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
@@ -40,12 +49,19 @@ router.post("/", auth, validateRecruiter, async (req, res) => {
     };
     
     const job = await createJob(jobData);
-    if (job.error) {
-      return handleError(res, job.status || 500, job.message);
+    if (!job) {
+      return handleError(res, 500, "Failed to create job");
     }
+    
+    logger.info('Job created successfully', {
+      jobId: job._id,
+      title: job.title,
+      postedBy: req.user._id
+    });
     
     return res.status(201).json(job);
   } catch (error) {
+    logger.error('Job creation error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
@@ -65,31 +81,48 @@ router.get("/", async (req, res) => {
         { title: searchRegex },
         { company: searchRegex },
         { description: searchRegex },
-        { location: searchRegex }
+        { requirements: searchRegex }
       ];
     }
     
     const jobs = await getAllJobs(filters);
-    if (jobs.error) {
-      return handleError(res, jobs.status || 500, jobs.message);
+    if (!jobs) {
+      return handleError(res, 500, "Failed to retrieve jobs");
     }
     
     return res.status(200).json(jobs);
   } catch (error) {
+    logger.error('Get jobs error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
 
-// Get jobs posted by the logged-in recruiter
-router.get("/my-listings", auth, validateRecruiter, async (req, res) => {
+// Get jobs by recruiter (alias route for compatibility)
+router.get("/my-listings", auth, requireRecruiter, async (req, res) => { // UPDATED TO USE requireRecruiter
   try {
     const jobs = await getJobsByRecruiterId(req.user._id);
-    if (jobs.error) {
-      return handleError(res, jobs.status || 500, jobs.message);
+    if (!jobs) {
+      return handleError(res, 500, "Failed to retrieve jobs");
     }
     
     return res.status(200).json(jobs);
   } catch (error) {
+    logger.error('Get recruiter jobs error:', error);
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Get jobs by recruiter (original route)
+router.get("/recruiter/my-jobs", auth, validateRecruiter, async (req, res) => {
+  try {
+    const jobs = await getJobsByRecruiterId(req.user._id);
+    if (!jobs) {
+      return handleError(res, 500, "Failed to retrieve jobs");
+    }
+    
+    return res.status(200).json(jobs);
+  } catch (error) {
+    logger.error('Get recruiter jobs error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
@@ -98,45 +131,199 @@ router.get("/my-listings", auth, validateRecruiter, async (req, res) => {
 router.post("/:id/apply", auth, validateObjectId, async (req, res) => {
   try {
     // Only jobseekers can apply for jobs
-    if (req.user.role !== "jobseeker") {
-      return handleError(res, 403, "Only jobseekers can apply for jobs");
+    if (req.user.role === 'recruiter' && !req.user.isAdmin) {
+      return handleError(res, 403, "Recruiters cannot apply for jobs");
     }
     
     const job = await applyForJob(req.params.id, req.user._id);
-    if (job.error) {
-      return handleError(res, job.status || 500, job.message);
+    if (!job) {
+      return handleError(res, 500, "Failed to apply for job");
     }
     
-    return res.status(200).json(job);
+    logger.info('Job application submitted', {
+      jobId: req.params.id,
+      applicantId: req.user._id,
+      applicantEmail: req.user.email
+    });
+    
+    return res.status(200).json({
+      message: "Successfully applied for job",
+      job: job
+    });
   } catch (error) {
+    logger.error('Job application error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
 
-// Save a job for later - SPECIFIC ROUTE FIRST
+// Save a job
 router.post("/:id/save", auth, validateObjectId, async (req, res) => {
   try {
     const result = await saveJob(req.params.id, req.user._id);
-    if (result.error) {
-      return handleError(res, result.status || 500, result.message);
+    if (!result) {
+      return handleError(res, 500, "Failed to save job");
     }
+    
+    logger.info('Job saved', {
+      jobId: req.params.id,
+      userId: req.user._id
+    });
     
     return res.status(200).json(result);
   } catch (error) {
+    logger.error('Save job error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
 
-// Get a job by ID - AFTER SPECIFIC ROUTES
+// Get job applicants (for recruiters and admins only) - NEW ROUTE
+router.get("/:id/applicants", auth, requireRecruiter, validateObjectId, async (req, res) => { // UPDATED TO USE requireRecruiter
+  try {
+    const jobId = req.params.id;
+    const userId = req.user._id;
+    const isAdmin = req.user.isAdmin;
+
+    // Get the job with populated applicants
+    const job = await Job.findById(jobId)
+      .populate({
+        path: 'applicants',
+        select: 'name email profession bio resume profilePicture createdAt role',
+        options: { sort: { createdAt: -1 } }
+      })
+      .populate('postedBy', 'name email');
+
+    if (!job) {
+      return handleError(res, 404, "Job not found");
+    }
+
+    // Authorization check: Only job owner or admin can view applicants
+    if (job.postedBy._id.toString() !== userId && !isAdmin) {
+      logger.warn('Unauthorized attempt to view job applicants', {
+        userId,
+        jobId,
+        jobOwner: job.postedBy._id
+      });
+      return handleError(res, 403, "Not authorized to view applicants for this job");
+    }
+
+    // Format applicant data
+    const formattedApplicants = job.applicants.map(applicant => ({
+      _id: applicant._id,
+      name: {
+        first: applicant.name.first,
+        last: applicant.name.last
+      },
+      email: applicant.email,
+      profession: applicant.profession,
+      bio: applicant.bio,
+      profilePicture: applicant.profilePicture,
+      hasResume: !!applicant.resume,
+      appliedAt: applicant.createdAt,
+      role: applicant.role
+    }));
+
+    const response = {
+      job: {
+        _id: job._id,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        jobType: job.jobType,
+        totalApplicants: job.applicants.length,
+        postedBy: job.postedBy.name
+      },
+      applicants: formattedApplicants,
+      pagination: {
+        total: formattedApplicants.length,
+        page: 1,
+        limit: formattedApplicants.length
+      }
+    };
+
+    logger.info('Job applicants retrieved successfully', {
+      recruiterId: userId,
+      jobId,
+      applicantCount: formattedApplicants.length
+    });
+
+    res.status(200).json(response);
+
+  } catch (error) {
+    logger.error('Get job applicants error:', error);
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Get applicant's resume (for job poster only) - NEW ROUTE
+router.get("/:jobId/applicants/:applicantId/resume", auth, requireRecruiter, async (req, res) => { // UPDATED TO USE requireRecruiter
+  try {
+    const { jobId, applicantId } = req.params;
+    const userId = req.user._id;
+    const isAdmin = req.user.isAdmin;
+
+    // Validate job ID format
+    if (!mongoose.Types.ObjectId.isValid(jobId) || !mongoose.Types.ObjectId.isValid(applicantId)) {
+      return handleError(res, 400, "Invalid ID format");
+    }
+
+    // Verify job ownership first
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return handleError(res, 404, "Job not found");
+    }
+
+    if (job.postedBy.toString() !== userId && !isAdmin) {
+      return handleError(res, 403, "Not authorized to access this applicant's resume");
+    }
+
+    // Verify the user actually applied to this job
+    if (!job.applicants.includes(applicantId)) {
+      return handleError(res, 404, "Applicant not found for this job");
+    }
+
+    // Get the applicant's resume
+    const applicant = await User.findById(applicantId).select('resume name');
+    if (!applicant || !applicant.resume) {
+      return handleError(res, 404, "Resume not found");
+    }
+
+    const resumePath = path.resolve(applicant.resume);
+    if (!fs.existsSync(resumePath)) {
+      return handleError(res, 404, "Resume file not found on server");
+    }
+
+    // Set appropriate headers
+    const fileName = `${applicant.name.first}_${applicant.name.last}_resume.pdf`;
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Type', 'application/pdf');
+
+    // Log the download
+    logger.info('Resume downloaded by recruiter', {
+      recruiterId: userId,
+      applicantId,
+      jobId,
+      fileName
+    });
+
+    res.sendFile(resumePath);
+
+  } catch (error) {
+    logger.error('Resume download error:', error);
+    return handleError(res, error.status || 500, error.message);
+  }
+});
+
+// Get a specific job by ID
 router.get("/:id", validateObjectId, async (req, res) => {
   try {
     const job = await getJobById(req.params.id);
-    if (job.error) {
-      return handleError(res, job.status || 404, job.message);
+    if (!job) {
+      return handleError(res, 404, "Job not found");
     }
     
     return res.status(200).json(job);
   } catch (error) {
+    logger.error('Get job by ID error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
@@ -150,12 +337,18 @@ router.put("/:id", auth, validateObjectId, async (req, res) => {
     }
     
     const job = await updateJob(req.params.id, req.body, req.user._id);
-    if (job.error) {
-      return handleError(res, job.status || 500, job.message);
+    if (!job) {
+      return handleError(res, 500, "Failed to update job");
     }
+    
+    logger.info('Job updated successfully', {
+      jobId: req.params.id,
+      updatedBy: req.user._id
+    });
     
     return res.status(200).json(job);
   } catch (error) {
+    logger.error('Job update error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
@@ -164,12 +357,18 @@ router.put("/:id", auth, validateObjectId, async (req, res) => {
 router.delete("/:id", auth, validateObjectId, async (req, res) => {
   try {
     const result = await deleteJob(req.params.id, req.user._id);
-    if (result.error) {
-      return handleError(res, result.status || 500, result.message);
+    if (!result) {
+      return handleError(res, 500, "Failed to delete job");
     }
+    
+    logger.info('Job deleted successfully', {
+      jobId: req.params.id,
+      deletedBy: req.user._id
+    });
     
     return res.status(200).json(result);
   } catch (error) {
+    logger.error('Job deletion error:', error);
     return handleError(res, error.status || 500, error.message);
   }
 });
