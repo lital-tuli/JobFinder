@@ -11,11 +11,12 @@ import {
   deleteJob
 } from "../models/jobAccessDataService.js";
 import auth from "../../auth/authService.js";
-import validateRecruiter, { requireRecruiter } from "../../auth/recruiterAuth.js"; // UPDATED IMPORT
+import validateRecruiter, { requireRecruiter } from "../../auth/recruiterAuth.js";
 import { handleError } from "../../utils/handleErrors.js";
 import validateJob from "../validation/jobValidationService.js";
-import Job from "../models/Job.js";
-import User from "../../users/models/User.js";
+// ✅ FIXED: Correct import paths
+import Job from "../../DB/models/Job.js";
+import User from "../../DB/models/User.js";
 import logger from "../../utils/logger.js";
 import path from "path";
 import fs from "fs";
@@ -98,7 +99,7 @@ router.get("/", async (req, res) => {
 });
 
 // Get jobs by recruiter (alias route for compatibility)
-router.get("/my-listings", auth, requireRecruiter, async (req, res) => { // UPDATED TO USE requireRecruiter
+router.get("/my-listings", auth, requireRecruiter, async (req, res) => {
   try {
     const jobs = await getJobsByRecruiterId(req.user._id);
     if (!jobs) {
@@ -177,7 +178,7 @@ router.post("/:id/save", auth, validateObjectId, async (req, res) => {
 });
 
 // Get job applicants (for recruiters and admins only) - NEW ROUTE
-router.get("/:id/applicants", auth, requireRecruiter, validateObjectId, async (req, res) => { // UPDATED TO USE requireRecruiter
+router.get("/:id/applicants", auth, requireRecruiter, validateObjectId, async (req, res) => {
   try {
     const jobId = req.params.id;
     const userId = req.user._id;
@@ -255,7 +256,7 @@ router.get("/:id/applicants", auth, requireRecruiter, validateObjectId, async (r
 });
 
 // Get applicant's resume (for job poster only) - NEW ROUTE
-router.get("/:jobId/applicants/:applicantId/resume", auth, requireRecruiter, async (req, res) => { // UPDATED TO USE requireRecruiter
+router.get("/:jobId/applicants/:applicantId/resume", auth, requireRecruiter, async (req, res) => {
   try {
     const { jobId, applicantId } = req.params;
     const userId = req.user._id;
