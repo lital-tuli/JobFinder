@@ -28,7 +28,6 @@ router.get("/check-auth", auth, (req, res) => {
         role: req.user.role,
         isAdmin: req.user.isAdmin,
         name: req.user.name,
-        email: req.user.email,
         profilePicture: req.user.profilePicture,
         resume: req.user.resume
       }
@@ -76,12 +75,16 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Login user - FIXED LOGIC
 router.post("/login", async (req, res) => {
   try {
     // Validate input
     const validationError = validateLogin(req.body);
     if (validationError) {
+      logger.warn('Login validation failed', { 
+        email: req.body.email,
+        error: validationError,
+        ip: req.ip
+      });
       handleError(res, 400, validationError);
       return;
     }
@@ -91,28 +94,54 @@ router.post("/login", async (req, res) => {
     // Attempt login
     const result = await loginUser(email, password);
     
-    // Check if login failed
     if (result.error) {
+      // Log failed login attempt
+      logger.warn('Failed login attempt', { 
+        email, 
+        reason: result.message,
+        status: result.status,
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+        timestamp: new Date().toISOString()
+      });
+      
       handleError(res, result.status || 401, result.message);
       return;
     }
     
-    // Verify we have required data
-    if (!result.token || !result.user) {
+    if (!result || !result.token || !result.user || !result.user._id) {
       logger.error('Login service returned incomplete data', { 
-        hasToken: !!result.token, 
-        hasUser: !!result.user,
-        email 
+        hasResult: !!result,
+        hasToken: !!(result?.token), 
+        hasUser: !!(result?.user),
+        hasUserId: !!(result?.user?._id),
+        email,
+        timestamp: new Date().toISOString()
       });
-      handleError(res, 500, "Login failed - incomplete response");
+      handleError(res, 500, "Authentication failed - incomplete response. Please try again.");
       return;
     }
     
-    // Success
+    if (!result.user.email || !result.user.role) {
+      logger.error('Login service returned invalid user data', {
+        hasEmail: !!result.user.email,
+        hasRole: !!result.user.role,
+        userId: result.user._id,
+        timestamp: new Date().toISOString()
+      });
+      handleError(res, 500, "Authentication failed - invalid user data. Please try again.");
+      return;
+    }
+    
+    // Success - only reach here if everything is valid
     logger.info('User logged in successfully', { 
       userId: result.user._id,
       email: result.user.email,
-      role: result.user.role
+      role: result.user.role,
+      isAdmin: result.user.isAdmin,
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date().toISOString()
     });
     
     res.status(200).json({
@@ -122,8 +151,14 @@ router.post("/login", async (req, res) => {
     });
     
   } catch (error) {
-    logger.error('Login error:', error);
-    handleError(res, error.status || 500, error.message);
+    logger.error('Login route error:', {
+      message: error.message,
+      stack: error.stack,
+      email: req.body?.email,
+      ip: req.ip,
+      timestamp: new Date().toISOString()
+    });
+    handleError(res, error.status || 500, error.message || "Internal server error during login");
   }
 });
 
@@ -132,7 +167,9 @@ router.post("/logout", auth, (req, res) => {
   try {
     logger.info('User logged out', { 
       userId: req.user._id,
-      email: req.user.email
+      role: req.user.role,
+      ip: req.ip,
+      timestamp: new Date().toISOString()
     });
     
     res.status(200).json({
@@ -188,89 +225,26 @@ router.put("/:id", auth, async (req, res) => {
       return;
     }
     
-    // Don't allow role changes unless admin
-    if (req.body.role && !req.user.isAdmin) {
-      delete req.body.role;
-    }
-    
-    // Prevent admins from removing their own admin role
-    if (req.body.role && req.user.isAdmin && id === requestingUserId && req.body.role !== 'admin') {
-      handleError(res, 400, "Cannot remove your own admin privileges");
+    const result = await updateUser(id, req.body);
+    if (result.error) {
+      handleError(res, result.status || 400, result.message);
       return;
     }
     
-    const updatedUser = await updateUser(id, req.body);
-    if (updatedUser.error) {
-      handleError(res, updatedUser.status || 500, updatedUser.message);
-      return;
-    }
-    
-    logger.info('User profile updated successfully', { 
+    logger.info('User profile updated', { 
       userId: id,
-      updatedBy: requestingUserId,
-      isAdminUpdate: req.user.isAdmin && id !== requestingUserId
+      updatedBy: requestingUserId
     });
     
     res.status(200).json({
       message: "Profile updated successfully",
-      user: updatedUser
+      user: result
     });
   } catch (error) {
     logger.error('Update user profile error:', error);
     handleError(res, error.status || 500, error.message);
   }
 });
-
-// Get current user's profile (convenience route)
-router.get("/profile/me", auth, async (req, res) => {
-  try {
-    const user = await getUserById(req.user._id);
-    if (user.error) {
-      handleError(res, user.status || 404, user.message);
-      return;
-    }
-    
-    res.status(200).json({
-      message: "Profile retrieved successfully",
-      user
-    });
-  } catch (error) {
-    logger.error('Get current user profile error:', error);
-    handleError(res, error.status || 500, error.message);
-  }
-});
-
-// Update current user's profile (convenience route)
-router.put("/profile/me", auth, async (req, res) => {
-  try {
-    // Don't allow role changes through this endpoint
-    if (req.body.role && !req.user.isAdmin) {
-      delete req.body.role;
-    }
-    
-    const updatedUser = await updateUser(req.user._id, req.body);
-    if (updatedUser.error) {
-      handleError(res, updatedUser.status || 500, updatedUser.message);
-      return;
-    }
-    
-    logger.info('User profile updated successfully', { 
-      userId: req.user._id
-    });
-    
-    res.status(200).json({
-      message: "Profile updated successfully",
-      user: updatedUser
-    });
-  } catch (error) {
-    logger.error('Update current user profile error:', error);
-    handleError(res, error.status || 500, error.message);
-  }
-});
-
-// =============================================================================
-// JOB INTERACTION ROUTES
-// =============================================================================
 
 // Get user's saved jobs
 router.get("/:id/saved-jobs", auth, async (req, res) => {
@@ -280,19 +254,19 @@ router.get("/:id/saved-jobs", auth, async (req, res) => {
     
     // Authorization check
     if (id !== requestingUserId && !req.user.isAdmin) {
-      handleError(res, 403, "Not authorized to access this user's saved jobs");
+      handleError(res, 403, "Not authorized to access saved jobs");
       return;
     }
     
-    const jobs = await getSavedJobs(id);
-    if (jobs.error) {
-      handleError(res, jobs.status || 500, jobs.message);
+    const savedJobs = await getSavedJobs(id);
+    if (savedJobs.error) {
+      handleError(res, savedJobs.status || 404, savedJobs.message);
       return;
     }
     
     res.status(200).json({
       message: "Saved jobs retrieved successfully",
-      jobs: jobs || []
+      savedJobs
     });
   } catch (error) {
     logger.error('Get saved jobs error:', error);
@@ -300,7 +274,7 @@ router.get("/:id/saved-jobs", auth, async (req, res) => {
   }
 });
 
-// Get user's applied jobs
+// Get user's job applications
 router.get("/:id/applied-jobs", auth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -308,59 +282,22 @@ router.get("/:id/applied-jobs", auth, async (req, res) => {
     
     // Authorization check
     if (id !== requestingUserId && !req.user.isAdmin) {
-      handleError(res, 403, "Not authorized to access this user's applied jobs");
+      handleError(res, 403, "Not authorized to access job applications");
       return;
     }
     
-    const jobs = await getAppliedJobs(id);
-    if (jobs.error) {
-      handleError(res, jobs.status || 500, jobs.message);
+    const appliedJobs = await getAppliedJobs(id);
+    if (appliedJobs.error) {
+      handleError(res, appliedJobs.status || 404, appliedJobs.message);
       return;
     }
     
     res.status(200).json({
       message: "Applied jobs retrieved successfully",
-      jobs: jobs || []
+      appliedJobs
     });
   } catch (error) {
     logger.error('Get applied jobs error:', error);
-    handleError(res, error.status || 500, error.message);
-  }
-});
-
-// Convenience routes for current user
-router.get("/jobs/saved", auth, async (req, res) => {
-  try {
-    const jobs = await getSavedJobs(req.user._id);
-    if (jobs.error) {
-      handleError(res, jobs.status || 500, jobs.message);
-      return;
-    }
-    
-    res.status(200).json({
-      message: "Saved jobs retrieved successfully",
-      jobs: jobs || []
-    });
-  } catch (error) {
-    logger.error('Get current user saved jobs error:', error);
-    handleError(res, error.status || 500, error.message);
-  }
-});
-
-router.get("/jobs/applied", auth, async (req, res) => {
-  try {
-    const jobs = await getAppliedJobs(req.user._id);
-    if (jobs.error) {
-      handleError(res, jobs.status || 500, jobs.message);
-      return;
-    }
-    
-    res.status(200).json({
-      message: "Applied jobs retrieved successfully",
-      jobs: jobs || []
-    });
-  } catch (error) {
-    logger.error('Get current user applied jobs error:', error);
     handleError(res, error.status || 500, error.message);
   }
 });
