@@ -1,16 +1,10 @@
 import express from "express";
-import {
-  registerUser,
-  loginUser,
-  getUserById,
-  updateUser,
-  getSavedJobs,
-  getAppliedJobs
-} from "../models/userAccessDataService.js";
-import auth from "../../auth/authService.js";
-import { handleError } from "../../utils/handleErrors.js";
-import { validateRegistration, validateLogin } from "../validation/userValidationService.js";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import User from "../../DB/models/User.js";
+import auth from "../../auth/auth.js";
 import logger from "../../utils/logger.js";
+import { validateUser, validateLogin } from "../validation/userValidation.js";
 
 const router = express.Router();
 
@@ -18,287 +12,454 @@ const router = express.Router();
 // AUTHENTICATION ROUTES
 // =============================================================================
 
-// Check authentication status
-router.get("/check-auth", auth, (req, res) => {
-  try {
-    res.status(200).json({
-      isAuthenticated: true,
-      user: {
-        _id: req.user._id,
-        role: req.user.role,
-        isAdmin: req.user.isAdmin,
-        name: req.user.name,
-        profilePicture: req.user.profilePicture,
-        resume: req.user.resume
-      }
-    });
-  } catch (error) {
-    logger.error('Check auth error:', error);
-    handleError(res, error.status || 500, error.message);
-  }
-});
-
-// Register a new user
+// Register new user
+// POST /api/users/
 router.post("/", async (req, res) => {
   try {
     // Validate input
-    const validationError = validateRegistration(req.body);
-    if (validationError) {
-      handleError(res, 400, validationError);
-      return;
+    const { error } = validateUser(req.body);
+    if (error) {
+      logger.warn('User registration validation failed', { 
+        errors: error.details.map(err => err.message),
+        email: req.body.email
+      });
+      return res.status(400).json({ 
+        message: error.details[0].message 
+      });
     }
-    
-    // Attempt registration
-    const result = await registerUser(req.body);
-    
-    // Check if registration failed
-    if (result.error) {
-      handleError(res, result.status || 500, result.message);
-      return;
+
+    const { name, email, password, role = "jobSeeker" } = req.body;
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      logger.warn('Registration attempt with existing email', { email });
+      return res.status(400).json({ 
+        message: "User with this email already exists" 
+      });
     }
-    
-    // Success
-    logger.info('User registered successfully', { 
-      userId: result._id, 
-      email: result.email,
-      role: result.role 
+
+    // Hash password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Create user
+    const newUser = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role,
+      createdAt: new Date(),
+      isActive: true
     });
-    
+
+    await newUser.save();
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: newUser._id,
+        email: newUser.email,
+        role: newUser.role
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" }
+    );
+
+    logger.info('User registered successfully', { 
+      userId: newUser._id,
+      email: newUser.email,
+      role: newUser.role
+    });
+
+    // Return success response
     res.status(201).json({
       message: "User registered successfully",
-      user: result
+      token,
+      user: {
+        _id: newUser._id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        createdAt: newUser.createdAt
+      }
     });
-    
+
   } catch (error) {
-    logger.error('Registration error:', error);
-    handleError(res, error.status || 500, error.message);
+    logger.error('User registration error:', error);
+    res.status(500).json({ 
+      message: "Server error during registration. Please try again." 
+    });
   }
 });
 
+// User login
+// POST /api/users/login
 router.post("/login", async (req, res) => {
   try {
     // Validate input
-    const validationError = validateLogin(req.body);
-    if (validationError) {
+    const { error } = validateLogin(req.body);
+    if (error) {
       logger.warn('Login validation failed', { 
         email: req.body.email,
-        error: validationError,
-        ip: req.ip
+        error: error.details[0].message
       });
-      handleError(res, 400, validationError);
-      return;
+      return res.status(400).json({ 
+        message: error.details[0].message 
+      });
     }
-    
+
     const { email, password } = req.body;
-    
-    // Attempt login
-    const result = await loginUser(email, password);
-    
-    if (result.error) {
-      // Log failed login attempt
-      logger.warn('Failed login attempt', { 
+
+    // Find user by email
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) {
+      logger.warn('Login attempt with non-existent email', { email });
+      return res.status(401).json({ 
+        message: "Invalid email or password" 
+      });
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      logger.warn('Login attempt with inactive account', { 
         email, 
-        reason: result.message,
-        status: result.status,
-        ip: req.ip,
-        userAgent: req.get('User-Agent'),
-        timestamp: new Date().toISOString()
+        userId: user._id 
       });
-      
-      handleError(res, result.status || 401, result.message);
-      return;
+      return res.status(401).json({ 
+        message: "Account is deactivated. Please contact support." 
+      });
     }
-    
-    if (!result || !result.token || !result.user || !result.user._id) {
-      logger.error('Login service returned incomplete data', { 
-        hasResult: !!result,
-        hasToken: !!(result?.token), 
-        hasUser: !!(result?.user),
-        hasUserId: !!(result?.user?._id),
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      logger.warn('Login attempt with incorrect password', { 
         email,
-        timestamp: new Date().toISOString()
+        userId: user._id
       });
-      handleError(res, 500, "Authentication failed - incomplete response. Please try again.");
-      return;
-    }
-    
-    if (!result.user.email || !result.user.role) {
-      logger.error('Login service returned invalid user data', {
-        hasEmail: !!result.user.email,
-        hasRole: !!result.user.role,
-        userId: result.user._id,
-        timestamp: new Date().toISOString()
+      return res.status(401).json({ 
+        message: "Invalid email or password" 
       });
-      handleError(res, 500, "Authentication failed - invalid user data. Please try again.");
-      return;
     }
-    
-    // Success - only reach here if everything is valid
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: user._id,
+        email: user.email,
+        role: user.role
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" }
+    );
+
     logger.info('User logged in successfully', { 
-      userId: result.user._id,
-      email: result.user.email,
-      role: result.user.role,
-      isAdmin: result.user.isAdmin,
-      ip: req.ip,
-      userAgent: req.get('User-Agent'),
-      timestamp: new Date().toISOString()
+      userId: user._id,
+      email: user.email,
+      role: user.role
     });
-    
-    res.status(200).json({
+
+    // Return success response
+    res.json({
       message: "Login successful",
-      token: result.token,
-      user: result.user
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        bio: user.bio,
+        location: user.location,
+        skills: user.skills,
+        profilePicture: user.profilePicture,
+        lastLogin: user.lastLogin
+      }
     });
-    
+
   } catch (error) {
-    logger.error('Login route error:', {
-      message: error.message,
-      stack: error.stack,
-      email: req.body?.email,
-      ip: req.ip,
-      timestamp: new Date().toISOString()
+    logger.error('Login error:', error);
+    res.status(500).json({ 
+      message: "Server error during login. Please try again." 
     });
-    handleError(res, error.status || 500, error.message || "Internal server error during login");
   }
 });
 
-// Logout user
-router.post("/logout", auth, (req, res) => {
+// Check authentication status
+// GET /api/users/check-auth
+router.get("/check-auth", auth, async (req, res) => {
   try {
-    logger.info('User logged out', { 
-      userId: req.user._id,
-      role: req.user.role,
-      ip: req.ip,
-      timestamp: new Date().toISOString()
-    });
+    const user = await User.findById(req.user.userId).select('-password');
     
-    res.status(200).json({
-      message: "Logout successful"
+    if (!user) {
+      logger.warn('Auth check failed - user not found', { 
+        userId: req.user.userId 
+      });
+      return res.status(401).json({ 
+        message: "User not found" 
+      });
+    }
+
+    if (!user.isActive) {
+      logger.warn('Auth check failed - user inactive', { 
+        userId: req.user.userId 
+      });
+      return res.status(401).json({ 
+        message: "Account is deactivated" 
+      });
+    }
+
+    res.json({
+      isAuthenticated: true,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        bio: user.bio,
+        location: user.location,
+        skills: user.skills,
+        profilePicture: user.profilePicture,
+        lastLogin: user.lastLogin
+      }
     });
+
+  } catch (error) {
+    logger.error('Auth check error:', error);
+    res.status(500).json({ 
+      message: "Server error during authentication check" 
+    });
+  }
+});
+
+// User logout
+// POST /api/users/logout
+router.post("/logout", auth, async (req, res) => {
+  try {
+    // In a more advanced implementation, you might want to blacklist the token
+    // For now, we'll just send a success response
+    logger.info('User logged out', { 
+      userId: req.user.userId 
+    });
+
+    res.json({ 
+      message: "Logged out successfully" 
+    });
+
   } catch (error) {
     logger.error('Logout error:', error);
-    handleError(res, error.status || 500, error.message);
+    res.status(500).json({ 
+      message: "Server error during logout" 
+    });
   }
 });
 
 // =============================================================================
-// PROFILE MANAGEMENT ROUTES
+// PROFILE ROUTES
 // =============================================================================
 
-// Get user profile
-router.get("/:id", auth, async (req, res) => {
+// Get user profile by ID
+// GET /api/users/:id
+router.get("/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const requestingUserId = req.user._id;
+    const user = await User.findById(req.params.id).select('-password');
     
-    // Authorization check
-    if (id !== requestingUserId && !req.user.isAdmin) {
-      handleError(res, 403, "Not authorized to access this profile");
-      return;
+    if (!user) {
+      return res.status(404).json({ 
+        message: "User not found" 
+      });
     }
-    
-    const user = await getUserById(id);
-    if (user.error) {
-      handleError(res, user.status || 404, user.message);
-      return;
-    }
-    
-    res.status(200).json({
-      message: "Profile retrieved successfully",
-      user
+
+    res.json({
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        bio: user.bio,
+        location: user.location,
+        skills: user.skills,
+        profilePicture: user.profilePicture,
+        createdAt: user.createdAt
+      }
     });
+
   } catch (error) {
     logger.error('Get user profile error:', error);
-    handleError(res, error.status || 500, error.message);
+    res.status(500).json({ 
+      message: "Server error while fetching user profile" 
+    });
   }
 });
 
 // Update user profile
+// PUT /api/users/:id
 router.put("/:id", auth, async (req, res) => {
   try {
-    const { id } = req.params;
-    const requestingUserId = req.user._id;
+    const userId = req.params.id;
     
-    // Authorization check
-    if (id !== requestingUserId && !req.user.isAdmin) {
-      handleError(res, 403, "Not authorized to update this profile");
-      return;
+    // Check if user can update this profile
+    if (req.user.userId !== userId && req.user.role !== "admin") {
+      return res.status(403).json({ 
+        message: "Access denied. You can only update your own profile." 
+      });
     }
+
+    const allowedUpdates = ['name', 'bio', 'location', 'skills', 'phone'];
+    const updates = {};
     
-    const result = await updateUser(id, req.body);
-    if (result.error) {
-      handleError(res, result.status || 400, result.message);
-      return;
+    // Filter allowed updates
+    allowedUpdates.forEach(field => {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    });
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ 
+        message: "No valid fields to update" 
+      });
     }
-    
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { ...updates, updatedAt: new Date() },
+      { new: true, select: '-password' }
+    );
+
+    if (!user) {
+      return res.status(404).json({ 
+        message: "User not found" 
+      });
+    }
+
     logger.info('User profile updated', { 
-      userId: id,
-      updatedBy: requestingUserId
+      userId,
+      updatedFields: Object.keys(updates)
     });
-    
-    res.status(200).json({
+
+    res.json({
       message: "Profile updated successfully",
-      user: result
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        bio: user.bio,
+        location: user.location,
+        skills: user.skills,
+        profilePicture: user.profilePicture,
+        updatedAt: user.updatedAt
+      }
     });
+
   } catch (error) {
     logger.error('Update user profile error:', error);
-    handleError(res, error.status || 500, error.message);
+    res.status(500).json({ 
+      message: "Server error while updating profile" 
+    });
   }
 });
 
-// Get user's saved jobs
-router.get("/:id/saved-jobs", auth, async (req, res) => {
+// Get current user profile
+// GET /api/users/profile/me
+router.get("/profile/me", auth, async (req, res) => {
   try {
-    const { id } = req.params;
-    const requestingUserId = req.user._id;
+    const user = await User.findById(req.user.userId).select('-password');
     
-    // Authorization check
-    if (id !== requestingUserId && !req.user.isAdmin) {
-      handleError(res, 403, "Not authorized to access saved jobs");
-      return;
+    if (!user) {
+      return res.status(404).json({ 
+        message: "User not found" 
+      });
     }
-    
-    const savedJobs = await getSavedJobs(id);
-    if (savedJobs.error) {
-      handleError(res, savedJobs.status || 404, savedJobs.message);
-      return;
-    }
-    
-    res.status(200).json({
-      message: "Saved jobs retrieved successfully",
-      savedJobs
+
+    res.json({
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        bio: user.bio,
+        location: user.location,
+        skills: user.skills,
+        profilePicture: user.profilePicture,
+        phone: user.phone,
+        resume: user.resume,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin
+      }
     });
+
   } catch (error) {
-    logger.error('Get saved jobs error:', error);
-    handleError(res, error.status || 500, error.message);
+    logger.error('Get current user profile error:', error);
+    res.status(500).json({ 
+      message: "Server error while fetching profile" 
+    });
   }
 });
 
-// Get user's job applications
-router.get("/:id/applied-jobs", auth, async (req, res) => {
+// Update current user profile
+// PUT /api/users/profile/me
+router.put("/profile/me", auth, async (req, res) => {
   try {
-    const { id } = req.params;
-    const requestingUserId = req.user._id;
+    const allowedUpdates = ['name', 'bio', 'location', 'skills', 'phone'];
+    const updates = {};
     
-    // Authorization check
-    if (id !== requestingUserId && !req.user.isAdmin) {
-      handleError(res, 403, "Not authorized to access job applications");
-      return;
-    }
-    
-    const appliedJobs = await getAppliedJobs(id);
-    if (appliedJobs.error) {
-      handleError(res, appliedJobs.status || 404, appliedJobs.message);
-      return;
-    }
-    
-    res.status(200).json({
-      message: "Applied jobs retrieved successfully",
-      appliedJobs
+    // Filter allowed updates
+    allowedUpdates.forEach(field => {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
     });
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ 
+        message: "No valid fields to update" 
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { ...updates, updatedAt: new Date() },
+      { new: true, select: '-password' }
+    );
+
+    if (!user) {
+      return res.status(404).json({ 
+        message: "User not found" 
+      });
+    }
+
+    logger.info('Current user profile updated', { 
+      userId: req.user.userId,
+      updatedFields: Object.keys(updates)
+    });
+
+    res.json({
+      message: "Profile updated successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        bio: user.bio,
+        location: user.location,
+        skills: user.skills,
+        profilePicture: user.profilePicture,
+        phone: user.phone,
+        updatedAt: user.updatedAt
+      }
+    });
+
   } catch (error) {
-    logger.error('Get applied jobs error:', error);
-    handleError(res, error.status || 500, error.message);
+    logger.error('Update current user profile error:', error);
+    res.status(500).json({ 
+      message: "Server error while updating profile" 
+    });
   }
 });
 
