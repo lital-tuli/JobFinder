@@ -1,15 +1,19 @@
 {
   "name": "jobfinder-server",
   "version": "1.0.0",
-  "description": "Job finding application backend",
+  "description": "Job finding application backend server",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "cleanup-logs": "node scripts/cleanup-console-logs.js",
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "prod": "NODE_ENV=production node server.js"
+    "prod": "NODE_ENV=production node server.js",
+    "seed": "node utils/seedDB.js",
+    "cleanup-logs": "node scripts/cleanup-console-logs.js"
   },
+  "keywords": ["job", "portal", "employment", "recruitment", "backend", "api"],
+  "author": "Lital Gehman",
+  "license": "MIT",
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "chalk": "^4.1.2",
@@ -31,5 +35,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

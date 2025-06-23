@@ -5,187 +5,143 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Files and directories to scan (relative to project root)
-const scanDirectories = ['./jobs', './users', './auth', './utils', './logger', './admin', './middlewares', './DB'];
-const excludeDirectories = ['node_modules', '.git', 'dist', 'build', 'JobFinder'];
-const fileExtensions = ['.js', '.jsx', '.ts', '.tsx'];
+// Files and directories to scan
+const projectRoot = path.join(__dirname, '..');
+const foldersToScan = [
+  'JobFinder/src',
+  'users',
+  'jobs', 
+  'admin',
+  'auth',
+  'utils'
+];
 
-// Console methods to look for
-const consoleMethods = ['log', 'info', 'warn', 'error', 'debug', 'trace'];
+// Extensions to check
+const extensions = ['.js', '.jsx', '.ts', '.tsx'];
 
-class ConsoleLogCleaner {
-  constructor() {
-    this.foundLogs = [];
-    this.processedFiles = 0;
-  }
+// Console patterns to find
+const consolePatterns = [
+  /console\.log\([^)]*\);?/g,
+  /console\.warn\([^)]*\);?/g,
+  /console\.error\([^)]*\);?/g,
+  /console\.info\([^)]*\);?/g,
+  /console\.debug\([^)]*\);?/g
+];
 
-  // Check if file should be processed
-  shouldProcessFile(filePath) {
-    const ext = path.extname(filePath);
-    return fileExtensions.includes(ext);
-  }
+// Development-only console patterns (keep these in dev mode)
+const devConsolePatterns = [
+  /if\s*\(\s*import\.meta\.env\.DEV\s*\)\s*\{[\s\S]*?console\.[^}]*\}/g,
+  /if\s*\(\s*process\.env\.NODE_ENV\s*===\s*['"]development['"]\s*\)\s*\{[\s\S]*?console\.[^}]*\}/g
+];
 
-  // Check if directory should be skipped
-  shouldSkipDirectory(dirPath) {
-    const dirName = path.basename(dirPath);
-    return excludeDirectories.some(exclude => dirPath.includes(exclude));
-  }
+let filesScanned = 0;
+let consoleLogsFound = 0;
+let filesModified = 0;
 
-  // Scan file for console.log statements
-  scanFile(filePath) {
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      const lines = content.split('\n');
-      
-      lines.forEach((line, index) => {
-        const trimmedLine = line.trim();
-        
-        // Skip comments
-        if (trimmedLine.startsWith('//') || trimmedLine.startsWith('*') || trimmedLine.startsWith('/*')) {
-          return;
-        }
-
-        // Look for console statements
-        consoleMethods.forEach(method => {
-          const patterns = [
-            new RegExp(`console\\.${method}\\s*\\(`, 'g'),
-            new RegExp(`console\\[['"]${method}['"]\\]\\s*\\(`, 'g')
-          ];
-
-          patterns.forEach(pattern => {
-            if (pattern.test(line)) {
-              this.foundLogs.push({
-                file: filePath,
-                line: index + 1,
-                method: method,
-                content: line.trim(),
-                suggestion: this.getSuggestion(method, line.trim())
-              });
-            }
-          });
-        });
-      });
-
-      this.processedFiles++;
-    } catch (error) {
-      console.error(`Error reading file ${filePath}:`, error.message);
-    }
-  }
-
-  // Get replacement suggestion based on console method
-  getSuggestion(method, line) {
-    const loggerMethods = {
-      'log': 'logger.info',
-      'info': 'logger.info',
-      'warn': 'logger.warn',
-      'error': 'logger.error',
-      'debug': 'logger.debug',
-      'trace': 'logger.debug'
-    };
-
-    const replacement = loggerMethods[method] || 'logger.info';
-    return line.replace(/console\.\w+\s*\(/, `${replacement}(`);
-  }
-
-  // Recursively scan directory
-  scanDirectory(dirPath) {
-    try {
-      const items = fs.readdirSync(dirPath);
-
-      items.forEach(item => {
-        const fullPath = path.join(dirPath, item);
-        const stat = fs.statSync(fullPath);
-
-        if (stat.isDirectory()) {
-          if (!this.shouldSkipDirectory(fullPath)) {
-            this.scanDirectory(fullPath);
-          }
-        } else if (stat.isFile()) {
-          if (this.shouldProcessFile(fullPath)) {
-            this.scanFile(fullPath);
-          }
-        }
-      });
-    } catch (error) {
-      console.error(`Error scanning directory ${dirPath}:`, error.message);
-    }
-  }
-
-  // Generate report
-  generateReport() {
-    console.log('\n' + '='.repeat(60));
-    console.log('CONSOLE.LOG CLEANUP REPORT');
-    console.log('='.repeat(60));
-    console.log(`Files processed: ${this.processedFiles}`);
-    console.log(`Console statements found: ${this.foundLogs.length}`);
-    console.log('='.repeat(60));
-
-    if (this.foundLogs.length === 0) {
-      console.log('🎉 No console.log statements found! Your code is clean.');
-      return;
-    }
-
-    // Group by file
-    const groupedByFile = this.foundLogs.reduce((acc, log) => {
-      if (!acc[log.file]) {
-        acc[log.file] = [];
-      }
-      acc[log.file].push(log);
-      return acc;
-    }, {});
-
-    // Print report for each file
-    Object.entries(groupedByFile).forEach(([file, logs]) => {
-      console.log(`\n📁 ${file}`);
-      console.log('-'.repeat(40));
-      
-      logs.forEach(log => {
-        console.log(`  Line ${log.line}: console.${log.method}()`);
-        console.log(`    Current: ${log.content}`);
-        console.log(`    Suggest: ${log.suggestion}`);
-        console.log('');
-      });
-    });
-
-    // Summary by method
-    console.log('\n📊 SUMMARY BY METHOD:');
-    console.log('-'.repeat(40));
-    const methodCounts = this.foundLogs.reduce((acc, log) => {
-      acc[log.method] = (acc[log.method] || 0) + 1;
-      return acc;
-    }, {});
-
-    Object.entries(methodCounts).forEach(([method, count]) => {
-      console.log(`  console.${method}: ${count} occurrences`);
-    });
-
-    console.log('\n💡 NEXT STEPS:');
-    console.log('-'.repeat(40));
-    console.log('1. Replace console statements with logger calls');
-    console.log('2. Import logger: import logger from "../utils/logger.js"');
-    console.log('3. Update calls as suggested above');
-    console.log('4. Remove any remaining debug console.logs');
-    console.log('5. Run this script again to verify cleanup');
-  }
-
-  // Run the cleanup scan
-  run() {
-    console.log('🔍 Scanning for console.log statements...');
+/**
+ * Recursively scan directory for files
+ */
+function scanDirectory(dir) {
+  try {
+    const items = fs.readdirSync(dir);
     
-    scanDirectories.forEach(dir => {
-      const fullDir = path.resolve(__dirname, '..', dir);
-      if (fs.existsSync(fullDir)) {
-        console.log(`Scanning: ${dir}`);
-        this.scanDirectory(fullDir);
-      } else {
-        console.log(`Directory not found: ${dir}`);
+    for (const item of items) {
+      const fullPath = path.join(dir, item);
+      const stat = fs.statSync(fullPath);
+      
+      if (stat.isDirectory()) {
+        // Skip node_modules and other unnecessary directories
+        if (!['node_modules', '.git', 'dist', 'build', '.next'].includes(item)) {
+          scanDirectory(fullPath);
+        }
+      } else if (stat.isFile()) {
+        const ext = path.extname(fullPath);
+        if (extensions.includes(ext)) {
+          processFile(fullPath);
+        }
       }
-    });
-
-    this.generateReport();
+    }
+  } catch (error) {
+    console.error(`Error scanning directory ${dir}:`, error.message);
   }
 }
 
-// Run the cleaner
-const cleaner = new ConsoleLogCleaner();
-cleaner.run();
+/**
+ * Process individual file to remove console logs
+ */
+function processFile(filePath) {
+  try {
+    filesScanned++;
+    const content = fs.readFileSync(filePath, 'utf8');
+    let newContent = content;
+    let fileModified = false;
+    
+    // Check for console logs
+    for (const pattern of consolePatterns) {
+      const matches = content.match(pattern);
+      if (matches) {
+        console.log(`Found ${matches.length} console logs in: ${filePath}`);
+        consoleLogsFound += matches.length;
+        
+        // Remove console logs but preserve development-only ones
+        newContent = newContent.replace(pattern, (match) => {
+          // Check if this console log is within a development-only block
+          const isDev = devConsolePatterns.some(devPattern => {
+            const devMatches = content.match(devPattern);
+            return devMatches && devMatches.some(devMatch => devMatch.includes(match));
+          });
+          
+          if (isDev) {
+            return match; // Keep development console logs
+          } else {
+            fileModified = true;
+            return ''; // Remove production console logs
+          }
+        });
+      }
+    }
+    
+    // Write back if modified
+    if (fileModified) {
+      fs.writeFileSync(filePath, newContent, 'utf8');
+      filesModified++;
+      console.log(`✅ Cleaned console logs from: ${filePath}`);
+    }
+    
+  } catch (error) {
+    console.error(`Error processing file ${filePath}:`, error.message);
+  }
+}
+
+/**
+ * Main execution
+ */
+function main() {
+  console.log('🧹 Starting console log cleanup...\n');
+  
+  // Scan specified folders
+  for (const folder of foldersToScan) {
+    const folderPath = path.join(projectRoot, folder);
+    if (fs.existsSync(folderPath)) {
+      console.log(`Scanning folder: ${folder}`);
+      scanDirectory(folderPath);
+    } else {
+      console.log(`⚠️  Folder not found: ${folder}`);
+    }
+  }
+  
+  console.log('\n📊 Cleanup Summary:');
+  console.log(`Files scanned: ${filesScanned}`);
+  console.log(`Console logs found: ${consoleLogsFound}`);
+  console.log(`Files modified: ${filesModified}`);
+  
+  if (filesModified > 0) {
+    console.log('\n✅ Console log cleanup completed!');
+    console.log('Note: Development-only console logs (within NODE_ENV checks) were preserved.');
+  } else {
+    console.log('\n✨ No console logs to clean - your code is already production-ready!');
+  }
+}
+
+// Run the cleanup
+main();
