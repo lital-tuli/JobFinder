@@ -274,7 +274,7 @@ const userSchema = new mongoose.Schema({
   timestamps: true,
   toJSON: { 
     virtuals: true,
-    transform: function(doc, ret) {
+    transform: function(_doc, ret) {
       delete ret.password;
       delete ret.emailVerificationToken;
       delete ret.passwordResetToken;

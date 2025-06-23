@@ -1,64 +1,53 @@
-import { createError, handleError } from "../utils/handleErrors.js";
-import { verifyToken } from "./providers/jwt.js";
-import logger from "../utils/logger.js";
-
-const auth = (req, res, next) => {
-  try {
-    const tokenFromClient = 
-      req.header("x-auth-token") || 
-      req.header("Authorization")?.replace("Bearer ", "") ||
-      req.headers.authorization?.replace("Bearer ", "");
-
-    if (!tokenFromClient) {
-      const error = new Error('Authentication required - no token provided');
-      error.status = 401;
-      throw error;
-    }
-
-    const userInfo = verifyToken(tokenFromClient);
-    if (!userInfo) {
-      const error = new Error("Invalid or expired token");
-      error.status = 401;
-      throw error;
-    }
-
-    const now = Math.floor(Date.now() / 1000);
-    if (userInfo.exp && userInfo.exp < now) {
-      const error = new Error("Token has expired");
-      error.status = 401;
-      throw error;
-    }
-
-    if (!userInfo._id || !userInfo.role) {
-      const error = new Error("Invalid token payload");
-      error.status = 401;
-      throw error;
-    }
-
-    // Ensure _id is always a string for consistent comparison
-    req.user = {
-      ...userInfo,
-      _id: userInfo._id.toString(),
-      isAdmin: userInfo.isAdmin || false
-    };
-    
-    logger.auth('user authenticated', userInfo._id, { 
-      role: userInfo.role,
-      isAdmin: userInfo.isAdmin,
-      endpoint: req.path
-    });
-    
-    return next();
-  } catch (error) {
-    logger.error('Authentication error:', {
-      message: error.message,
-      endpoint: req.path,
-      method: req.method,
-      ip: req.ip,
-      userAgent: req.get('User-Agent')
-    });
-    return handleError(res, error.status || 401, error.message);
+class AuthService {
+  constructor() {
+    this.setupAxiosInterceptors();
   }
-};
-
-export default auth;
+  
+  setupAxiosInterceptors() {
+    // Request interceptor
+    axios.interceptors.request.use(
+      (config) => {
+        const token = this.getAccessToken();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      }
+    );
+    
+    // Response interceptor for token expiration
+    axios.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        if (error.response?.status === 401 && error.response?.data?.code === 'TOKEN_EXPIRED') {
+          await this.handleTokenExpiration();
+          return Promise.reject(error);
+        }
+        return Promise.reject(error);
+      }
+    );
+  }
+  
+  async handleTokenExpiration() {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    window.location.href = '/login';
+  }
+  
+  getAccessToken() {
+    return localStorage.getItem('accessToken');
+  }
+  
+  login(credentials) {
+    return axios.post('/api/auth/login', credentials)
+      .then(response => {
+        const { accessToken, refreshToken, user } = response.data;
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+        return { user, success: true };
+      })
+      .catch(error => {
+        throw new Error(error.response?.data?.error || 'Login failed');
+      });
+  }
+}
