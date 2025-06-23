@@ -75,18 +75,21 @@ const userRegistrationSchema = Joi.object({
   bio: Joi.string()
     .max(500)
     .allow('')
+    .optional()
     .messages({
       'string.max': 'Bio cannot exceed 500 characters'
     }),
   location: Joi.string()
     .max(100)
     .allow('')
+    .optional()
     .messages({
       'string.max': 'Location cannot exceed 100 characters'
     }),
   skills: Joi.array()
     .items(Joi.string().max(50))
     .max(20)
+    .optional()
     .messages({
       'array.max': 'Cannot have more than 20 skills',
       'string.max': 'Each skill cannot exceed 50 characters'
@@ -94,6 +97,7 @@ const userRegistrationSchema = Joi.object({
   phone: Joi.string()
     .pattern(/^[\+]?[1-9][\d]{0,15}$/)
     .allow('')
+    .optional()
     .messages({
       'string.pattern.base': 'Please provide a valid phone number'
     }),
@@ -152,18 +156,21 @@ const profileUpdateSchema = Joi.object({
   bio: Joi.string()
     .max(500)
     .allow('')
+    .optional()
     .messages({
       'string.max': 'Bio cannot exceed 500 characters'
     }),
   location: Joi.string()
     .max(100)
     .allow('')
+    .optional()
     .messages({
       'string.max': 'Location cannot exceed 100 characters'
     }),
   skills: Joi.array()
     .items(Joi.string().max(50))
     .max(20)
+    .optional()
     .messages({
       'array.max': 'Cannot have more than 20 skills',
       'string.max': 'Each skill cannot exceed 50 characters'
@@ -171,6 +178,7 @@ const profileUpdateSchema = Joi.object({
   phone: Joi.string()
     .pattern(/^[\+]?[1-9][\d]{0,15}$/)
     .allow('')
+    .optional()
     .messages({
       'string.pattern.base': 'Please provide a valid phone number'
     }),
@@ -305,29 +313,74 @@ const userSearchSchema = Joi.object({
 });
 
 // =============================================================================
-// VALIDATION FUNCTION
+// VALIDATION FUNCTIONS - FIXED TO MATCH AUTHROUTES EXPECTATIONS
 // =============================================================================
 
-const validateUser = (userData, schema) => {
-  const { error, value } = schema.validate(userData, {
+// ✅ FIXED: User registration validation function
+export const validateUser = (userData) => {
+  const { error, value } = userRegistrationSchema.validate(userData, {
     abortEarly: false,
     allowUnknown: false,
     stripUnknown: true
   });
 
   if (error) {
-    const errors = error.details.map(detail => detail.message);
-    return errors.join(', ');
+    return { error };
   }
 
-  return null;
+  return { value };
+};
+
+// ✅ FIXED: User login validation function  
+export const validateLogin = (loginData) => {
+  const { error, value } = userLoginSchema.validate(loginData, {
+    abortEarly: false,
+    allowUnknown: false,
+    stripUnknown: true
+  });
+
+  if (error) {
+    return { error };
+  }
+
+  return { value };
+};
+
+// Profile update validation function
+export const validateProfileUpdate = (updateData) => {
+  const { error, value } = profileUpdateSchema.validate(updateData, {
+    abortEarly: false,
+    allowUnknown: false,
+    stripUnknown: true
+  });
+
+  if (error) {
+    return { error };
+  }
+
+  return { value };
+};
+
+// Password change validation function
+export const validatePasswordChange = (passwordData) => {
+  const { error, value } = passwordChangeSchema.validate(passwordData, {
+    abortEarly: false,
+    allowUnknown: false,
+    stripUnknown: true
+  });
+
+  if (error) {
+    return { error };
+  }
+
+  return { value };
 };
 
 // =============================================================================
 // FILE VALIDATION HELPER
 // =============================================================================
 
-const validateFile = (file, allowedTypes, maxSize = 5 * 1024 * 1024) => {
+export const validateFile = (file, allowedTypes, maxSize = 5 * 1024 * 1024) => {
   const errors = [];
 
   if (!file) {
@@ -367,9 +420,7 @@ export {
   passwordSchema,
   emailSchema,
   nameSchema,
-  roleSchema,
-  validateUser,
-  validateFile
+  roleSchema
 };
 
 // =============================================================================

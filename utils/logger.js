@@ -25,17 +25,17 @@ class Logger {
 
   // Info level logging (replaces most console.log)
   info(message, data = null) {
-    ));
+    console.log(chalk.blue(this.formatMessage('INFO', message, data)));
   }
 
   // Success level logging
   success(message, data = null) {
-    ));
+    console.log(chalk.green(this.formatMessage('SUCCESS', message, data)));
   }
 
   // Warning level logging
   warn(message, data = null) {
-    ));
+    console.log(chalk.yellow(this.formatMessage('WARN', message, data)));
   }
 
   // Error level logging (replaces console.error)
@@ -48,13 +48,13 @@ class Logger {
       status: error.status
     } : null;
 
-    ));
+    console.error(chalk.red(this.formatMessage('ERROR', message, errorData)));
   }
 
   // Debug level logging (only in development)
   debug(message, data = null) {
     if (this.isDevelopment) {
-      ));
+      console.log(chalk.gray(this.formatMessage('DEBUG', message, data)));
     }
   }
 

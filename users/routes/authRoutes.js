@@ -2,9 +2,9 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../../DB/models/User.js";
-import auth from "../../auth/auth.js";
+import auth from "../../auth/authService.js"; 
 import logger from "../../utils/logger.js";
-import { validateUser, validateLogin } from "../validation/userValidation.js";
+import { validateUser, validateLogin } from "../validation/userValidationService.js";
 
 const router = express.Router();
 
@@ -309,154 +309,50 @@ router.put("/:id", auth, async (req, res) => {
       });
     }
 
-    const allowedUpdates = ['name', 'bio', 'location', 'skills', 'phone'];
+    const allowedUpdates = ['name', 'bio', 'location', 'skills', 'profilePicture'];
     const updates = {};
     
-    // Filter allowed updates
+    // Only include allowed fields
     allowedUpdates.forEach(field => {
       if (req.body[field] !== undefined) {
         updates[field] = req.body[field];
       }
     });
 
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ 
-        message: "No valid fields to update" 
-      });
-    }
-
-    const user = await User.findByIdAndUpdate(
+    // Update user
+    const updatedUser = await User.findByIdAndUpdate(
       userId,
-      { ...updates, updatedAt: new Date() },
-      { new: true, select: '-password' }
-    );
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).select('-password');
 
-    if (!user) {
+    if (!updatedUser) {
       return res.status(404).json({ 
         message: "User not found" 
       });
     }
 
-    logger.info('User profile updated', { 
-      userId,
+    logger.info('User profile updated', {
+      userId: updatedUser._id,
       updatedFields: Object.keys(updates)
     });
 
     res.json({
       message: "Profile updated successfully",
       user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        bio: user.bio,
-        location: user.location,
-        skills: user.skills,
-        profilePicture: user.profilePicture,
-        updatedAt: user.updatedAt
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        bio: updatedUser.bio,
+        location: updatedUser.location,
+        skills: updatedUser.skills,
+        profilePicture: updatedUser.profilePicture
       }
     });
 
   } catch (error) {
     logger.error('Update user profile error:', error);
-    res.status(500).json({ 
-      message: "Server error while updating profile" 
-    });
-  }
-});
-
-// Get current user profile
-// GET /api/users/profile/me
-router.get("/profile/me", auth, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId).select('-password');
-    
-    if (!user) {
-      return res.status(404).json({ 
-        message: "User not found" 
-      });
-    }
-
-    res.json({
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        bio: user.bio,
-        location: user.location,
-        skills: user.skills,
-        profilePicture: user.profilePicture,
-        phone: user.phone,
-        resume: user.resume,
-        createdAt: user.createdAt,
-        lastLogin: user.lastLogin
-      }
-    });
-
-  } catch (error) {
-    logger.error('Get current user profile error:', error);
-    res.status(500).json({ 
-      message: "Server error while fetching profile" 
-    });
-  }
-});
-
-// Update current user profile
-// PUT /api/users/profile/me
-router.put("/profile/me", auth, async (req, res) => {
-  try {
-    const allowedUpdates = ['name', 'bio', 'location', 'skills', 'phone'];
-    const updates = {};
-    
-    // Filter allowed updates
-    allowedUpdates.forEach(field => {
-      if (req.body[field] !== undefined) {
-        updates[field] = req.body[field];
-      }
-    });
-
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ 
-        message: "No valid fields to update" 
-      });
-    }
-
-    const user = await User.findByIdAndUpdate(
-      req.user.userId,
-      { ...updates, updatedAt: new Date() },
-      { new: true, select: '-password' }
-    );
-
-    if (!user) {
-      return res.status(404).json({ 
-        message: "User not found" 
-      });
-    }
-
-    logger.info('Current user profile updated', { 
-      userId: req.user.userId,
-      updatedFields: Object.keys(updates)
-    });
-
-    res.json({
-      message: "Profile updated successfully",
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        bio: user.bio,
-        location: user.location,
-        skills: user.skills,
-        profilePicture: user.profilePicture,
-        phone: user.phone,
-        updatedAt: user.updatedAt
-      }
-    });
-
-  } catch (error) {
-    logger.error('Update current user profile error:', error);
     res.status(500).json({ 
       message: "Server error while updating profile" 
     });
